@@ -67,8 +67,9 @@ val checkWebAssets = tasks.register("checkWebAssets") {
         if (!index.asFile.exists()) {
             throw GradleException(
                 "Missing EffectCraft web assets (src/main/assets/web/index.html).\n" +
-                    "Run scripts/fetch-web-assets.sh from the repository root, or let the\n" +
-                    "'Android (web port)' GitHub Actions workflow build the APK."
+                    "Run scripts/build-web.sh (wasm source + mobile patches) or\n" +
+                    "scripts/fetch-web-assets.sh (stock release zip) from the repo root,\n" +
+                    "or let the 'Android (web port)' GitHub Actions workflow build it."
             )
         }
     }
