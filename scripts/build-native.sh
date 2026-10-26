@@ -20,13 +20,28 @@ NDK_VERSION="${ANDROID_NDK_VERSION:-27.2.12479018}"
 JNILIBS="$ROOT/android/nativeapp/src/main/jniLibs/arm64-v8a"
 
 # --- pinned upstream checkout -------------------------------------------------
-if [ ! -d "$WORK/.git" ]; then
-  mkdir -p "$(dirname "$WORK")"
-  git clone --depth 1 --branch "$REF" https://github.com/storytold/effectcraft.git "$WORK"
-else
+# CI restores `.upstream/effectcraft/target/` from rust-cache without the checkout
+# itself, so the directory can exist while `.git` does not — re-clone around the
+# cached target dir instead of failing with "already exists and is not empty".
+if [ -d "$WORK/.git" ]; then
   git -C "$WORK" fetch --depth 1 origin "refs/tags/$REF" 2>/dev/null ||
     git -C "$WORK" fetch --depth 1 origin "$REF"
   git -C "$WORK" checkout -f FETCH_HEAD
+else
+  KEEP=""
+  if [ -d "$WORK" ]; then
+    if [ -d "$WORK/target" ]; then
+      KEEP="$(mktemp -d)"
+      mv "$WORK/target" "$KEEP/target"
+    fi
+    rm -rf "$WORK"
+  fi
+  mkdir -p "$(dirname "$WORK")"
+  git clone --depth 1 --branch "$REF" https://github.com/storytold/effectcraft.git "$WORK"
+  if [ -n "$KEEP" ]; then
+    mv "$KEEP/target" "$WORK/target"
+    rmdir "$KEEP"
+  fi
 fi
 echo "-> upstream $REF @ $(git -C "$WORK" rev-parse --short HEAD)"
 
