@@ -1,7 +1,8 @@
 /*
  * EffectDroid — serves the bundled EffectCraft site from `assets/web/`.
  *
- * A custom PathHandler (instead of the stock AssetsPathHandler) so `.wasm` is always sent as
+ * A custom WebViewAssetLoader.PathHandler (instead of the stock AssetsPathHandler) so `.wasm`
+ * is always sent as
  * `application/wasm`: WebView refuses WebAssembly streaming compilation under any other type,
  * and not every device's MimeTypeMap knows the extension (upstream packaging/web/README.md).
  */
@@ -16,7 +17,7 @@ import java.io.InputStream
 
 class WebAssetsPathHandler(private val context: Context) : WebViewAssetLoader.PathHandler {
 
-    override fun shouldInterceptRequest(url: Uri): WebResourceResponse? {
+    override fun handle(url: Uri): WebResourceResponse? {
         var path = (url.path ?: return null).trimStart('/')
         if (path.endsWith("/")) path = path.removeSuffix("/")
         if (path.contains("..") || path.contains("\\")) return null
