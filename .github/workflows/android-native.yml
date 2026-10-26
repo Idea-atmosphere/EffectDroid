@@ -77,8 +77,16 @@ jobs:
         with:
           tool: cargo-ndk
 
+      # tee + annotations: raw run logs live on a host some environments can't reach, so the
+      # key failure lines are surfaced as annotations (readable through the Checks API).
       - name: Build effectcraft-cli for Android arm64
-        run: scripts/build-native.sh cli
+        run: |
+          if ! scripts/build-native.sh cli 2>&1 | tee build-cli.log; then
+            echo "::error::effectcraft-cli build failed — key lines:"
+            grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced" build-cli.log \
+              | head -n 10 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
@@ -89,11 +97,23 @@ jobs:
 
       - name: Build the native GUI (libeffectcraft_android.so)
         if: github.event_name == 'workflow_dispatch' && inputs.build_gui
-        run: scripts/build-native.sh gui
+        run: |
+          if ! scripts/build-native.sh gui 2>&1 | tee build-gui.log; then
+            echo "::error::native GUI (libeffectcraft_android.so) build failed — key lines:"
+            grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|is not a member" build-gui.log \
+              | head -n 12 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
 
       - name: Assemble the native APK
         if: github.event_name == 'workflow_dispatch' && inputs.build_gui
-        run: scripts/build-native.sh apk
+        run: |
+          if ! scripts/build-native.sh apk 2>&1 | tee build-apk.log; then
+            echo "::error::native APK assembly failed — key lines:"
+            grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred" build-apk.log \
+              | head -n 10 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
 
       - name: Upload native APK
         if: github.event_name == 'workflow_dispatch' && inputs.build_gui

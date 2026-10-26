@@ -55,7 +55,15 @@ jobs:
         working-directory: android
         env:
           VERSION_NAME: ${{ env.EFFECTCRAFT_REF }}
-        run: ./gradlew --no-daemon :webapp:assembleRelease
+        # tee + annotations: raw run logs live on a host some environments can't reach, so
+        # the key failure lines are surfaced as annotations (readable through the Checks API).
+        run: |
+          if ! ./gradlew --no-daemon :webapp:assembleRelease 2>&1 | tee gradle.log; then
+            echo "::error::Gradle build failed — key lines:"
+            grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred|BUILD FAILED" gradle.log \
+              | head -n 10 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
 
       - name: Name the artifact
         run: |
