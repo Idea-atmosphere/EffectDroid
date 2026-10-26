@@ -64,7 +64,10 @@ jobs:
           if ! ./gradlew --no-daemon :webapp:assembleRelease 2>&1 | tee gradle.log; then
             echo "::error::Gradle build failed — key lines:"
             { grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred|BUILD FAILED|Exception in thread|Launcher failed|Downloading" gradle.log \
-                || true; } | head -n 12 | while IFS= read -r line; do echo "::error::$line"; done || true
+                || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
+            echo "::error::gradle.log tail:"
+            { tail -n 6 gradle.log 2>/dev/null || true; } \
+              | while IFS= read -r l; do echo "::error::$l"; done || true
             exit 1
           fi
 
