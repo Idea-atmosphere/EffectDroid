@@ -21,7 +21,6 @@ use winit::platform::android::activity::AndroidApp;
 fn build(
     cc: &eframe::CreationContext<'_>,
 ) -> Result<Box<dyn eframe::App>, Box<dyn std::error::Error + Send + Sync>> {
-    EffectcraftApp::install_ime_reset_hooks(&cc.egui_ctx);
     match &cc.wgpu_render_state {
         Some(rs) => log::info!("graphics: {:?}", rs.adapter.get_info()),
         None => log::info!("graphics: no wgpu device"),

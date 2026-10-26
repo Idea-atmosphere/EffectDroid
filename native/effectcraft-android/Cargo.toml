@@ -28,8 +28,9 @@ effectcraft-ui-egui = { workspace = true }
 egui = { workspace = true }
 # `android-game-activity` (not native-activity): effectcraft-ui-egui enables eframe's
 # `accesskit` unconditionally, and eframe compile-errors without game-activity on Android
-# (crates/eframe/src/lib.rs upstream).
-eframe = { workspace = true, features = ["default_fonts", "wgpu", "clipboard", "links", "android-game-activity"] }
+# (crates/eframe/src/lib.rs upstream). No `clipboard`: eframe 0.36 (the pinned release)
+# has no such feature — egui-winit falls back to its simulated in-app clipboard anyway.
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "links", "android-game-activity"] }
 log = { workspace = true }
 serde_json = { workspace = true }
 # Same version eframe uses; features unify. Needed to name `AndroidApp` in `android_main`.
