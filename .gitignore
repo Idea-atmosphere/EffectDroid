@@ -1,0 +1,24 @@
+# Android / Gradle
+android/.gradle/
+android/build/
+android/webapp/build/
+android/nativeapp/build/
+android/local.properties
+android/.idea/
+*.apk
+*.aab
+*.ap_
+
+# EffectCraft web assets are fetched, not committed (scripts/fetch-web-assets.sh or CI).
+android/webapp/src/main/assets/web/*
+!android/webapp/src/main/assets/web/.gitkeep
+
+# Native arm64 port: upstream checkout + build outputs
+.upstream/
+android/nativeapp/src/main/jniLibs/**/*.so
+target/
+*.so
+
+# Misc
+.DS_Store
+*.log

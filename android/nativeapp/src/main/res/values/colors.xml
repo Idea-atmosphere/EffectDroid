@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches EffectCraft's dark UI (#1b1c1f). -->
+    <color name="launch_background">#1B1C1F</color>
+    <!-- The EffectCraft brand pink. -->
+    <color name="ic_launcher_background">#E0368F</color>
+</resources>

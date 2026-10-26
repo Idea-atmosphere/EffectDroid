@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches EffectCraft's dark UI (#1b1c1f, apps/effectcraft-web/web/index.html). -->
+    <color name="launch_background">#1B1C1F</color>
+    <!-- The EffectCraft brand pink (assets/app-icon, README badges). -->
+    <color name="brand_pink">#E0368F</color>
+    <color name="ic_launcher_background">#E0368F</color>
+</resources>

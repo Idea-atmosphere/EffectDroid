@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# Build EffectCraft for Android arm64 — EffectDroid's "Linux arm64 → Android" port.
+#
+#   scripts/build-native.sh cli    # effectcraft-cli (headless render / MCP) for Android
+#   scripts/build-native.sh gui    # libeffectcraft_android.so (eframe GUI) → :nativeapp jniLibs
+#   scripts/build-native.sh apk    # assemble the :nativeapp release APK (needs the gui step first)
+#   scripts/build-native.sh all    # cli + gui + apk
+#
+# Requirements: rustup (stable + aarch64-linux-android), Android SDK with NDK
+# (default 27.2.12479018, override ANDROID_NDK_VERSION), cargo-ndk (auto-installed),
+# JDK 17 for the apk step. EFFECTCRAFT_REF pins the upstream release (default v0.17.0).
+# CI: .github/workflows/android-native.yml.
+set -euo pipefail
+
+WHAT="${1:-all}"
+REF="${EFFECTCRAFT_REF:-v0.17.0}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORK="${EFFECTCRAFT_DIR:-$ROOT/.upstream/effectcraft}"
+NDK_VERSION="${ANDROID_NDK_VERSION:-27.2.12479018}"
+JNILIBS="$ROOT/android/nativeapp/src/main/jniLibs/arm64-v8a"
+
+# --- pinned upstream checkout -------------------------------------------------
+if [ ! -d "$WORK/.git" ]; then
+  mkdir -p "$(dirname "$WORK")"
+  git clone --depth 1 --branch "$REF" https://github.com/storytold/effectcraft.git "$WORK"
+else
+  git -C "$WORK" fetch --depth 1 origin "refs/tags/$REF" 2>/dev/null ||
+    git -C "$WORK" fetch --depth 1 origin "$REF"
+  git -C "$WORK" checkout -f FETCH_HEAD
+fi
+echo "-> upstream $REF @ $(git -C "$WORK" rev-parse --short HEAD)"
+
+# --- drop the Android entry crate into the upstream workspace (apps/*) ---------
+rm -rf "$WORK/apps/effectcraft-android"
+cp -R "$ROOT/native/effectcraft-android" "$WORK/apps/effectcraft-android"
+
+# --- toolchain ----------------------------------------------------------------
+rustup target add aarch64-linux-android >/dev/null 2>&1 || rustup target add aarch64-linux-android
+if [ -z "${ANDROID_NDK_HOME:-}" ]; then
+  for candidate in "${ANDROID_NDK_ROOT:-}" "${ANDROID_HOME:-}/ndk/$NDK_VERSION"; do
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then ANDROID_NDK_HOME="$candidate"; break; fi
+  done
+fi
+[ -n "${ANDROID_NDK_HOME:-}" ] && [ -d "${ANDROID_NDK_HOME:-}" ] || {
+  echo "error: Android NDK not found — install ndk;$NDK_VERSION or set ANDROID_NDK_HOME" >&2
+  exit 1
+}
+export ANDROID_NDK_HOME
+command -v cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk
+
+strip_bin() { # best-effort NDK llvm-strip (keeps artifacts/APKs small)
+  local f="$1"
+  local strip
+  strip="$(find "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" -name llvm-strip 2>/dev/null | head -1)"
+  [ -n "$strip" ] && "$strip" --strip-unneeded "$f" 2>/dev/null || true
+}
+
+OUT_DIR="$ROOT/artifacts"
+mkdir -p "$OUT_DIR"
+VERSION="${REF#v}"
+
+build_cli() {
+  echo "-> building effectcraft-cli (aarch64-linux-android, release)"
+  (cd "$WORK" && cargo ndk -t arm64-v8a build --release -p effectcraft-cli)
+  local bin="$WORK/target/aarch64-linux-android/release/effectcraft-cli"
+  [ -f "$bin" ] || { echo "error: $bin not produced" >&2; exit 1; }
+  strip_bin "$bin"
+  local pkg="$OUT_DIR/effectcraft-cli-$VERSION-android-arm64"
+  rm -rf "$pkg" && mkdir -p "$pkg"
+  cp "$bin" "$pkg/"
+  cat > "$pkg/README.txt" <<EOF
+EffectCraft headless CLI for Android arm64 (bionic), built from storytold/effectcraft $REF.
+
+Run on a device (adb shell or Termux):
+  adb push effectcraft-cli /data/local/tmp/
+  adb shell chmod 755 /data/local/tmp/effectcraft-cli
+  adb shell /data/local/tmp/effectcraft-cli --version
+
+The binary links only against the system Bionic libraries (libc, libm, libdl, libvulkan
+for GPU renders) — no root required. See docs/ANDROID.md.
+EOF
+  tar -C "$OUT_DIR" -czf "$pkg.tar.gz" "$(basename "$pkg")"
+  rm -rf "$pkg"
+  echo "-> $pkg.tar.gz"
+}
+
+build_gui() {
+  echo "-> building libeffectcraft_android.so (eframe GUI, aarch64-linux-android, release)"
+  mkdir -p "$JNILIBS"
+  (cd "$WORK" && cargo ndk -t arm64-v8a -o "$JNILIBS" build --release -p effectcraft-android)
+  local so="$JNILIBS/libeffectcraft_android.so"
+  [ -f "$so" ] || { echo "error: $so not produced" >&2; exit 1; }
+  strip_bin "$so"
+  echo "-> $so ($(du -h "$so" | cut -f1))"
+}
+
+build_apk() {
+  [ -f "$JNILIBS/libeffectcraft_android.so" ] || {
+    echo "error: run 'scripts/build-native.sh gui' first (missing libeffectcraft_android.so)" >&2
+    exit 1
+  }
+  echo "-> assembling :nativeapp release APK"
+  (cd "$ROOT/android" && VERSION_NAME="$VERSION" ./gradlew --no-daemon :nativeapp:assembleRelease)
+  local apk
+  apk="$(find "$ROOT/android/nativeapp/build/outputs/apk/release" -name '*.apk' | head -1)"
+  [ -n "$apk" ] || { echo "error: no APK produced" >&2; exit 1; }
+  cp "$apk" "$OUT_DIR/effectdroid-native-$VERSION.apk"
+  echo "-> $OUT_DIR/effectdroid-native-$VERSION.apk"
+}
+
+case "$WHAT" in
+  cli) build_cli ;;
+  gui) build_gui ;;
+  apk) build_apk ;;
+  all) build_cli; build_gui; build_apk ;;
+  *) echo "usage: $0 [cli|gui|apk|all]" >&2; exit 2 ;;
+esac
+echo "done."
