@@ -50,7 +50,9 @@ echo "-> upstream $REF @ $(git -C "$WORK" rev-parse --short HEAD)"
 rustup target add wasm32-unknown-unknown >/dev/null 2>&1 ||
   rustup target add wasm32-unknown-unknown
 want="$(grep -A2 '^name = "wasm-bindgen"$' "$WORK/Cargo.lock" | grep -m1 '^version = ' | sed 's/version = "//; s/"//')"
-have="$(wasm-bindgen --version 2>/dev/null || echo missing)"
+# `wasm-bindgen --version` prints "wasm-bindgen <version>"; keep the last field.
+have="$( { wasm-bindgen --version || true; } | awk 'NF { print $NF }' )"
+have="${have:-missing}"
 if [ "$have" != "$want" ]; then
   echo "error: wasm-bindgen-cli is '$have' but the lockfile needs exactly '$want'" >&2
   echo "       cargo install wasm-bindgen-cli --version $want --locked" >&2
