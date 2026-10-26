@@ -39,7 +39,7 @@ concurrency:
 
 env:
   EFFECTCRAFT_REF: ${{ inputs.ref || 'v0.17.0' }}
-  ANDROID_NDK_VERSION: '27.2.12479018'
+  ANDROID_NDK_VERSION: '27.3.13750724'
 
 jobs:
   build:
@@ -61,7 +61,11 @@ jobs:
       - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
         shell: bash
         run: |
-          if ! sdkmanager --install "ndk;$ANDROID_NDK_VERSION" 2>&1 | tee sdkmanager.log; then
+          # The runner image ships 27.3 preinstalled; older NDK packages rotate out of the
+          # SDK repository (27.2 vanished mid-run once), so prefer what is already there.
+          if [ -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" ]; then
+            echo "NDK $ANDROID_NDK_VERSION already present (image preinstall)"
+          elif ! sdkmanager --install "ndk;$ANDROID_NDK_VERSION" 2>&1 | tee sdkmanager.log; then
             echo "::error::sdkmanager failed to install ndk;$ANDROID_NDK_VERSION — available NDK packages:"
             { sdkmanager --list 2>/dev/null | grep -E "ndk;" || true; } | head -n 12 \
               | while IFS= read -r line; do echo "::error::$line"; done || true

@@ -7,7 +7,7 @@
 #   scripts/build-native.sh all    # cli + gui + apk
 #
 # Requirements: rustup (stable + aarch64-linux-android), Android SDK with NDK
-# (default 27.2.12479018, override ANDROID_NDK_VERSION), cargo-ndk (auto-installed),
+# (default 27.3.13750724, override ANDROID_NDK_VERSION), cargo-ndk (auto-installed),
 # JDK 17 for the apk step. EFFECTCRAFT_REF pins the upstream release (default v0.17.0).
 # CI: .github/workflows/android-native.yml.
 set -euo pipefail
@@ -16,7 +16,7 @@ WHAT="${1:-all}"
 REF="${EFFECTCRAFT_REF:-v0.17.0}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="${EFFECTCRAFT_DIR:-$ROOT/.upstream/effectcraft}"
-NDK_VERSION="${ANDROID_NDK_VERSION:-27.2.12479018}"
+NDK_VERSION="${ANDROID_NDK_VERSION:-27.3.13750724}"
 JNILIBS="$ROOT/android/nativeapp/src/main/jniLibs/arm64-v8a"
 
 # --- pinned upstream checkout -------------------------------------------------

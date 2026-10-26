@@ -208,8 +208,8 @@ Rust code.
 ### Build it (local)
 
 ```sh
-# one-time: rustup target add aarch64-linux-android; Android SDK + NDK 27.2.12479018; JDK 17
-export ANDROID_HOME=…                    # sdkmanager "ndk;27.2.12479018"
+# one-time: rustup target add aarch64-linux-android; Android SDK + NDK 27.3.13750724; JDK 17
+export ANDROID_HOME=…                    # sdkmanager "ndk;27.3.13750724"
 scripts/build-native.sh cli              # → artifacts/effectcraft-cli-0.17.0-android-arm64.tar.gz
 scripts/build-native.sh all              # cli + GUI .so + effectdroid-native-0.17.0.apk
 ```

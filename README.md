@@ -27,7 +27,7 @@ Device: Android 8.0+, evergreen WebView (WebGPU or WebGL2), ~250 MB free.
 scripts/build-web.sh                 # source + mobile patches — or: fetch-web-assets.sh (stock zip)
 cd android && ./gradlew :webapp:assembleRelease
 
-# Native arm64 port (adds: rustup target aarch64-linux-android, NDK 27.2.12479018)
+# Native arm64 port (adds: rustup target aarch64-linux-android, NDK 27.3.13750724)
 scripts/build-native.sh all
 ```
 
