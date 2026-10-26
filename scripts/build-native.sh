@@ -125,11 +125,18 @@ EOF
 build_gui() {
   echo "-> building libeffectcraft_android.so (eframe GUI, aarch64-linux-android, release)"
   mkdir -p "$JNILIBS"
-  (cd "$WORK" && cargo ndk -t arm64-v8a -o "$JNILIBS" build --release -p effectcraft-android)
-  local so="$JNILIBS/libeffectcraft_android.so"
-  [ -f "$so" ] || { echo "error: $so not produced" >&2; exit 1; }
-  strip_bin "$so"
-  echo "-> $so ($(du -h "$so" | cut -f1))"
+  # cargo-ndk copies into an arch subdirectory of -o; stage then place the lib where
+  # Gradle's jniLibs layout (jniLibs/<abi>/*.so) expects it.
+  local stage so
+  stage="$(mktemp -d)"
+  (cd "$WORK" && cargo ndk -t arm64-v8a -o "$stage" build --release -p effectcraft-android)
+  so="$(find "$stage" -name 'libeffectcraft_android.so' -print -quit)"
+  [ -n "$so" ] || { echo "error: libeffectcraft_android.so not produced" >&2; exit 1; }
+  cp "$so" "$JNILIBS/libeffectcraft_android.so"
+  rm -rf "$stage"
+  strip_bin "$JNILIBS/libeffectcraft_android.so"
+  local out="$JNILIBS/libeffectcraft_android.so"
+  echo "-> $out ($(du -h "$out" | cut -f1))"
 }
 
 build_apk() {
