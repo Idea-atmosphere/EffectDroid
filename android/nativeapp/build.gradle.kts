@@ -62,3 +62,11 @@ dependencies {
     // eframe's `accesskit` feature on Android — see crates/eframe/src/lib.rs upstream).
     implementation("androidx.games:games-activity:4.4.0")
 }
+
+// kotlin-stdlib ≥1.8 merged the kotlin-stdlib-jdk7/jdk8 shim classes, and a transitive old
+// jdk7/jdk8 pair (1.6.x) was still coming along — :nativeapp:checkReleaseDuplicateClasses
+// failed on PathsKt/StreamsKt/&co. The shim modules contribute nothing stdlib ≥1.8 lacks.
+configurations.all {
+    exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk7")
+    exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+}
