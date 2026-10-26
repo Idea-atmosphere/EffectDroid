@@ -99,9 +99,7 @@ jobs:
             echo "::error::effectcraft-cli build failed — key lines:"
             { grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|Exception in thread" build-cli.log \
                 || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
-            echo "::error::build-cli.log tail:"
-            { tail -n 6 build-cli.log 2>/dev/null || true; } \
-              | while IFS= read -r l; do echo "::error::$l"; done || true
+            echo "::error::LOG TAIL build-cli.log: $( { tail -n 25 build-cli.log 2>/dev/null || true; } | tr '\n' '|' )"
             exit 1
           fi
 
@@ -120,9 +118,7 @@ jobs:
             echo "::error::native GUI (libeffectcraft_android.so) build failed — key lines:"
             { grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|is not a member" build-gui.log \
                 || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
-            echo "::error::build-gui.log tail:"
-            { tail -n 6 build-gui.log 2>/dev/null || true; } \
-              | while IFS= read -r l; do echo "::error::$l"; done || true
+            echo "::error::LOG TAIL build-gui.log: $( { tail -n 25 build-gui.log 2>/dev/null || true; } | tr '\n' '|' )"
             exit 1
           fi
 
@@ -134,9 +130,7 @@ jobs:
             echo "::error::native APK assembly failed — key lines:"
             { grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred" build-apk.log \
                 || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
-            echo "::error::build-apk.log tail:"
-            { tail -n 6 build-apk.log 2>/dev/null || true; } \
-              | while IFS= read -r l; do echo "::error::$l"; done || true
+            echo "::error::LOG TAIL build-apk.log: $( { tail -n 25 build-apk.log 2>/dev/null || true; } | tr '\n' '|' )"
             exit 1
           fi
 
