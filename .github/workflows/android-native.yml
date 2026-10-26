@@ -58,6 +58,7 @@ jobs:
         uses: android-actions/setup-android@v4
 
       - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
+        shell: bash
         run: |
           if ! sdkmanager --install "ndk;$ANDROID_NDK_VERSION" 2>&1 | tee sdkmanager.log; then
             echo "::error::sdkmanager failed to install ndk;$ANDROID_NDK_VERSION — available NDK packages:"
@@ -69,6 +70,7 @@ jobs:
 
       - name: Android SDK diagnostics (only if something failed)
         if: failure()
+        shell: bash
         run: |
           echo "::error::ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset} sdkmanager=$(command -v sdkmanager || echo missing)"
           { ls "${ANDROID_HOME:-/nonexistent}" 2>/dev/null || true; } | head -n 10 | while IFS= read -r d; do echo "::error::sdk entry: $d"; done || true
@@ -91,6 +93,7 @@ jobs:
       # tee + annotations: raw run logs live on a host some environments can't reach, so the
       # key failure lines are surfaced as annotations (readable through the Checks API).
       - name: Build effectcraft-cli for Android arm64
+        shell: bash
         run: |
           if ! scripts/build-native.sh cli 2>&1 | tee build-cli.log; then
             echo "::error::effectcraft-cli build failed — key lines:"
@@ -108,6 +111,7 @@ jobs:
 
       - name: Build the native GUI (libeffectcraft_android.so)
         if: github.event_name == 'workflow_dispatch' && inputs.build_gui
+        shell: bash
         run: |
           if ! scripts/build-native.sh gui 2>&1 | tee build-gui.log; then
             echo "::error::native GUI (libeffectcraft_android.so) build failed — key lines:"
@@ -118,6 +122,7 @@ jobs:
 
       - name: Assemble the native APK
         if: github.event_name == 'workflow_dispatch' && inputs.build_gui
+        shell: bash
         run: |
           if ! scripts/build-native.sh apk 2>&1 | tee build-apk.log; then
             echo "::error::native APK assembly failed — key lines:"
@@ -136,6 +141,7 @@ jobs:
 
       - name: Job summary
         if: always()
+        shell: bash
         run: |
           {
             echo "### EffectCraft → aarch64-linux-android"

@@ -165,6 +165,30 @@ class MainActivity : AppCompatActivity() {
                 }
                 return true
             }
+
+            // target="_blank" links (eframe's `links` feature): capture the request and
+            // hand the URL to the system browser instead of opening a hidden WebView.
+            override fun onCreateWindow(
+                view: WebView?,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: android.os.Message?,
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                val sneaky = WebView(view?.context ?: return false)
+                sneaky.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        v: WebView?,
+                        r: WebResourceRequest?,
+                    ): Boolean {
+                        r?.url?.let(::openExternally)
+                        return true
+                    }
+                }
+                transport.webView = sneaky
+                resultMsg.sendToTarget()
+                return true
+            }
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -197,30 +221,6 @@ class MainActivity : AppCompatActivity() {
                     scheme == "about" -> false
                     else -> true // blob:/data:/intent:/… never navigate the shell
                 }
-            }
-
-            override fun onCreateWindow(
-                view: WebView?,
-                isDialog: Boolean,
-                isUserGesture: Boolean,
-                resultMsg: android.os.Message?,
-            ): Boolean {
-                // target="_blank" links (eframe's `links` feature): capture the request and
-                // hand the URL to the system browser instead of a hidden WebView.
-                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
-                val sneaky = WebView(view?.context ?: return false)
-                sneaky.webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(
-                        v: WebView?,
-                        r: WebResourceRequest?,
-                    ): Boolean {
-                        r?.url?.let(::openExternally)
-                        return true
-                    }
-                }
-                transport.webView = sneaky
-                resultMsg.sendToTarget()
-                return true
             }
         }
     }

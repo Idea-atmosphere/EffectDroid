@@ -34,12 +34,14 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Resolve EffectCraft ref (tag builds follow the tag)
+        shell: bash
         run: |
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             echo "EFFECTCRAFT_REF=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
           fi
 
       - name: Fetch EffectCraft web assets
+        shell: bash
         run: scripts/fetch-web-assets.sh "$EFFECTCRAFT_REF"
 
       - name: Set up JDK 17
@@ -57,6 +59,7 @@ jobs:
           VERSION_NAME: ${{ env.EFFECTCRAFT_REF }}
         # tee + annotations: raw run logs live on a host some environments can't reach, so
         # the key failure lines are surfaced as annotations (readable through the Checks API).
+        shell: bash
         run: |
           if ! ./gradlew --no-daemon :webapp:assembleRelease 2>&1 | tee gradle.log; then
             echo "::error::Gradle build failed — key lines:"
@@ -66,6 +69,7 @@ jobs:
           fi
 
       - name: Name the artifact
+        shell: bash
         run: |
           # -print -quit (no pipe): with pipefail a `find | head` can die on SIGPIPE.
           apk="$(find android/webapp/build/outputs/apk -name '*.apk' -type f -print -quit 2>/dev/null || true)"
@@ -93,6 +97,7 @@ jobs:
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
             gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" \
