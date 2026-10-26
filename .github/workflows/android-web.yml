@@ -25,13 +25,13 @@ concurrency:
 jobs:
   apk:
     name: Build WebView APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write # tag builds attach the APK to the matching release
     env:
       EFFECTCRAFT_REF: ${{ inputs.ref || 'v0.17.0' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Resolve EffectCraft ref (tag builds follow the tag)
         run: |
@@ -43,7 +43,7 @@ jobs:
         run: scripts/fetch-web-assets.sh "$EFFECTCRAFT_REF"
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -60,15 +60,24 @@ jobs:
         run: |
           if ! ./gradlew --no-daemon :webapp:assembleRelease 2>&1 | tee gradle.log; then
             echo "::error::Gradle build failed — key lines:"
-            grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred|BUILD FAILED" gradle.log \
-              | head -n 10 | while IFS= read -r line; do echo "::error::$line"; done
+            { grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred|BUILD FAILED|Exception in thread|Launcher failed|Downloading" gradle.log \
+                || true; } | head -n 12 | while IFS= read -r line; do echo "::error::$line"; done || true
             exit 1
           fi
 
       - name: Name the artifact
         run: |
-          apk="$(find android/webapp/build/outputs/apk/release -name '*.apk' | head -1)"
-          test -n "$apk"
+          # -print -quit (no pipe): with pipefail a `find | head` can die on SIGPIPE.
+          apk="$(find android/webapp/build/outputs/apk -name '*.apk' -type f -print -quit 2>/dev/null || true)"
+          if [ -z "$apk" ]; then
+            echo "::error::assembleRelease reported success but produced no APK — outputs tree:"
+            { find android/webapp/build/outputs -type f 2>/dev/null || true; } | head -n 15 \
+              | while IFS= read -r f; do echo "::error::  $f"; done || true
+            echo "::error::gradle.log tail:"
+            { tail -n 25 android/gradle.log 2>/dev/null || true; } \
+              | while IFS= read -r l; do echo "::error::$l"; done || true
+            exit 1
+          fi
           out="effectdroid-web-${EFFECTCRAFT_REF#v}.apk"
           cp "$apk" "$out"
           echo "APK=$out" >> "$GITHUB_ENV"

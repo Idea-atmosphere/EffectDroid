@@ -43,24 +43,35 @@ env:
 jobs:
   build:
     name: cargo-ndk aarch64-linux-android
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
         run: |
-          sdkmanager --install "ndk;$ANDROID_NDK_VERSION"
+          if ! sdkmanager --install "ndk;$ANDROID_NDK_VERSION" 2>&1 | tee sdkmanager.log; then
+            echo "::error::sdkmanager failed to install ndk;$ANDROID_NDK_VERSION — available NDK packages:"
+            { sdkmanager --list 2>/dev/null | grep -E "ndk;" || true; } | head -n 12 \
+              | while IFS= read -r line; do echo "::error::$line"; done || true
+            exit 1
+          fi
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Android SDK diagnostics (only if something failed)
+        if: failure()
+        run: |
+          echo "::error::ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset} sdkmanager=$(command -v sdkmanager || echo missing)"
+          { ls "${ANDROID_HOME:-/nonexistent}" 2>/dev/null || true; } | head -n 10 | while IFS= read -r d; do echo "::error::sdk entry: $d"; done || true
 
       - name: Set up Rust (stable, Android target)
         uses: dtolnay/rust-toolchain@stable
@@ -83,8 +94,8 @@ jobs:
         run: |
           if ! scripts/build-native.sh cli 2>&1 | tee build-cli.log; then
             echo "::error::effectcraft-cli build failed — key lines:"
-            grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced" build-cli.log \
-              | head -n 10 | while IFS= read -r line; do echo "::error::$line"; done
+            { grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|Exception in thread" build-cli.log \
+                || true; } | head -n 12 | while IFS= read -r line; do echo "::error::$line"; done || true
             exit 1
           fi
 
@@ -100,8 +111,8 @@ jobs:
         run: |
           if ! scripts/build-native.sh gui 2>&1 | tee build-gui.log; then
             echo "::error::native GUI (libeffectcraft_android.so) build failed — key lines:"
-            grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|is not a member" build-gui.log \
-              | head -n 12 | while IFS= read -r line; do echo "::error::$line"; done
+            { grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|is not a member" build-gui.log \
+                || true; } | head -n 14 | while IFS= read -r line; do echo "::error::$line"; done || true
             exit 1
           fi
 
@@ -110,8 +121,8 @@ jobs:
         run: |
           if ! scripts/build-native.sh apk 2>&1 | tee build-apk.log; then
             echo "::error::native APK assembly failed — key lines:"
-            grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred" build-apk.log \
-              | head -n 10 | while IFS= read -r line; do echo "::error::$line"; done
+            { grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred" build-apk.log \
+                || true; } | head -n 12 | while IFS= read -r line; do echo "::error::$line"; done || true
             exit 1
           fi
 
