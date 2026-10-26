@@ -44,6 +44,7 @@ else
   fi
 fi
 echo "-> upstream $REF @ $(git -C "$WORK" rev-parse --short HEAD)"
+"$ROOT/scripts/apply-upstream-patches.sh" "$WORK"
 
 # --- drop the Android entry crate into the upstream workspace (apps/*) ---------
 rm -rf "$WORK/apps/effectcraft-android"

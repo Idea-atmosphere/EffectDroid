@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fetch EffectCraft's official web build (effectcraft-web-<version>.zip from the upstream
-# GitHub release) into android/webapp/src/main/assets/web/.
+# GitHub release) into android/webapp/src/main/assets/web/. Stock zip — WITHOUT EffectDroid's
+# mobile patches; scripts/build-web.sh builds from source with patches/ applied (CI default).
 #
 # Usage: scripts/fetch-web-assets.sh [release-tag]     (default: $EFFECTCRAFT_REF or v0.17.0)
 # Needs: unzip, curl or gh (gh preferred — pattern-matches the asset name).

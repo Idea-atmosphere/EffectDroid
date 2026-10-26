@@ -1,8 +1,9 @@
 name: Android (web port)
 
-# EffectDroid Web APK: fetches EffectCraft's official web build (effectcraft-web-<ref>.zip
-# from the upstream release) and assembles the WebView shell around it. No Rust toolchain
-# needed — upstream ships the wasm build.
+# EffectDroid Web APK: builds EffectCraft's web (wasm) site from the pinned upstream
+# release with EffectDroid's mobile patches (patches/*.patch), stages it into the webapp
+# assets and assembles the WebView shell. scripts/fetch-web-assets.sh (stock release zip,
+# no patches) remains available for environments without a Rust toolchain.
 on:
   push:
     branches: [main]
@@ -40,9 +41,40 @@ jobs:
             echo "EFFECTCRAFT_REF=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
           fi
 
-      - name: Fetch EffectCraft web assets
+      - name: Set up Rust (stable, wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Rust cache (upstream web workspace)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '.upstream/effectcraft-web -> target'
+
+      # Must equal the wasm-bindgen version in the upstream Cargo.lock (0.2.129 at
+      # v0.17.0, docs/web.md); build-web.sh fails with the exact need if they drift.
+      - name: Install wasm-bindgen CLI (lockfile-pinned)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+
+      # cargo xtask web runs wasm-opt when found (any recent binaryen per docs/web.md).
+      - name: Install wasm-opt (binaryen)
         shell: bash
-        run: scripts/fetch-web-assets.sh "$EFFECTCRAFT_REF"
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq binaryen
+
+      # tee + annotations: raw run logs live on a host some environments can't reach, so
+      # the key failure lines are surfaced as annotations (readable through the Checks API).
+      - name: Build the EffectCraft web bundle (source + mobile patches)
+        shell: bash
+        run: |
+          if ! scripts/build-web.sh 2>&1 | tee build-web.log; then
+            echo "::error::web bundle build failed — key lines:"
+            { grep -E "error(\[[A-Z0-9]+\])?: |^error: |--> |panicked at|does not apply|not produced|No such file|could not compile|failed to select" build-web.log \
+                || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
+            echo "::error::LOG TAIL build-web.log: $( { tail -n 25 build-web.log 2>/dev/null || true; } | tr '\n' '|' )"
+            exit 1
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -65,9 +97,7 @@ jobs:
             echo "::error::Gradle build failed — key lines:"
             { grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred|BUILD FAILED|Exception in thread|Launcher failed|Downloading" gradle.log \
                 || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
-            echo "::error::gradle.log tail:"
-            { tail -n 6 gradle.log 2>/dev/null || true; } \
-              | while IFS= read -r l; do echo "::error::$l"; done || true
+            echo "::error::LOG TAIL gradle.log: $( { tail -n 25 gradle.log 2>/dev/null || true; } | tr '\n' '|' )"
             exit 1
           fi
 
@@ -80,9 +110,7 @@ jobs:
             echo "::error::assembleRelease reported success but produced no APK — outputs tree:"
             { find android/webapp/build/outputs -type f 2>/dev/null || true; } | head -n 15 \
               | while IFS= read -r f; do echo "::error::  $f"; done || true
-            echo "::error::gradle.log tail:"
-            { tail -n 25 android/gradle.log 2>/dev/null || true; } \
-              | while IFS= read -r l; do echo "::error::$l"; done || true
+            echo "::error::LOG TAIL android/gradle.log: $( { tail -n 25 android/gradle.log 2>/dev/null || true; } | tr '\n' '|' )"
             exit 1
           fi
           out="effectdroid-web-${EFFECTCRAFT_REF#v}.apk"

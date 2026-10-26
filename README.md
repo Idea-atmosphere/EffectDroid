@@ -23,8 +23,8 @@ Device: Android 8.0+, evergreen WebView (WebGPU or WebGL2), ~250 MB free.
 ## Build locally
 
 ```sh
-# Web port (JDK 17 + Android SDK)
-scripts/fetch-web-assets.sh v0.17.0
+# Web port (JDK 17 + Android SDK; wasm tools for scripts/build-web.sh)
+scripts/build-web.sh                 # source + mobile patches — or: fetch-web-assets.sh (stock zip)
 cd android && ./gradlew :webapp:assembleRelease
 
 # Native arm64 port (adds: rustup target aarch64-linux-android, NDK 27.2.12479018)
@@ -34,10 +34,11 @@ scripts/build-native.sh all
 ## Repository layout
 
 ```
-android/webapp      WebView port of EffectCraft's official web build
+android/webapp      WebView port of EffectCraft's web build
 android/nativeapp   APK hosting the native aarch64-linux-android build
 native/             drop-in Android entry crate for the pinned upstream workspace
-scripts/            fetch-web-assets.sh (release zip → assets), build-native.sh (cargo-ndk)
+scripts/            build-web.sh (wasm + patches → assets), fetch-web-assets.sh (stock zip),
+                    apply-upstream-patches.sh, build-native.sh (cargo-ndk)
 docs/ANDROID.md     full porting notes, device requirements, limitations, upgrade flow
 ```
 

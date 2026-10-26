@@ -1,0 +1,64 @@
+diff --git a/crates/ui-egui/src/dock.rs b/crates/ui-egui/src/dock.rs
+index ae66eae..58f4921 100644
+--- a/crates/ui-egui/src/dock.rs
++++ b/crates/ui-egui/src/dock.rs
+@@ -282,6 +282,7 @@ pub const WORKSPACES: &[&str] = &[
+     "Default",
+     "Standard",
+     "Small Screen",
++    "Phone",
+     "Animation",
+     "Effects",
+     "Motion Tracking",
+@@ -407,6 +408,16 @@ pub fn workspace(name: &str) -> DockNode {
+             ),
+             tabs(&[Timeline], 0),
+         ),
++        // EffectDroid (mobile): phone-narrow windows get a full-width tab strip over the
++        // timeline instead of fixed side columns — selected tab first, the rest shrink and
++        // overflow into the strip's overflow menu (craft-ui `tabs::fit`), so every panel
++        // stays reachable at ~390 pt wide. Chosen by `EffectcraftApp` while the layout is
++        // still the untouched Default; Window ▸ Workspace switches back at any time.
++        "Phone" => vsplit(
++            Ratio(0.55),
++            tabs(&[Composition, Layer, Project, EffectControls, EffectsPresets, Properties, Preview], 0),
++            tabs(&[Timeline, RenderQueue, Progress], 0),
++        ),
+         "All Panels" => vsplit(
+             Ratio(0.55),
+             hsplit(
+diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+index 5a15523..b52ed63 100644
+--- a/crates/ui-egui/src/lib.rs
++++ b/crates/ui-egui/src/lib.rs
+@@ -1667,6 +1667,20 @@ impl EffectcraftApp {
+         }
+         self.run_script_tasks(&ctx);
+         self.apply_prefs(&ctx);
++        // EffectDroid (mobile): phone-narrow windows adopt the Phone workspace while the
++        // layout is still the untouched stored Default (first run, or a wide window rotated
++        // into portrait). A layout the user rearranged or a workspace they chose is never
++        // replaced — Window ▸ Workspace lists "Phone" like any built-in.
++        let narrow = ctx.content_rect().width() < 720.0;
++        if narrow && self.ui.workspace == "Default" && self.ui.dock == dock::workspace("Default") {
++            self.set_workspace("Phone");
++        }
++        // Touch-sized hit targets on narrow screens. The theme applies its spacing only when
++        // prefs change, so this runs every frame to follow rotation both ways.
++        ctx.all_styles_mut(|s| {
++            s.spacing.interact_size = if narrow { egui::vec2(44.0, 36.0) } else { egui::vec2(24.0, 22.0) };
++            s.spacing.item_spacing = if narrow { egui::vec2(8.0, 6.0) } else { egui::vec2(6.0, 4.0) };
++        });
+         self.handle_events(&ctx);
+         panels::unsaved::on_close_requested(self, &ctx);
+         let title = panels::unsaved::window_title(self);
+@@ -1697,7 +1711,8 @@ impl EffectcraftApp {
+         ui.painter().rect_filled(full, 0.0, t.app_bg);
+         let mut top = full.min.y;
+         if self.ui.show_menu_bar {
+-            let mb = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), 24.0));
++            // EffectDroid (mobile): a taller strip is easier to tap on phone-narrow windows.
++            let mb = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), if narrow { 32.0 } else { 24.0 }));
+             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(mb));
+             child.painter().rect_filled(mb, 0.0, t.header_bg);
+             menus::menu_bar(self, &mut child);

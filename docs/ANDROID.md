@@ -24,13 +24,17 @@ EffectDroid/
 │   │       ├── kotlin/…/MainActivity.kt        # immersive WebView, file chooser, link routing
 │   │       ├── kotlin/…/WebAssetsPathHandler.kt # assets → https://appassets.androidassets.net
 │   │       ├── kotlin/…/DownloadBridge.kt       # blob: saves → Download/EffectCraft (streamed)
-│   │       └── assets/web/           # filled by scripts/fetch-web-assets.sh (not committed)
+│   │       └── assets/web/           # filled by scripts/build-web.sh (CI; not committed)
 │   └── nativeapp/                  # ← linux arm64 → Android port (GameActivity + jniLibs)
 ├── native/effectcraft-android/     # drop-in eframe entry crate, copied into the upstream
 │                                   # workspace as apps/effectcraft-android/ by the build script
+├── patches/                        # EffectDroid's upstream diffs (mobile UI), applied
+│                                   # to every pinned checkout by the build scripts
 ├── scripts/
-│   ├── fetch-web-assets.sh         # upstream release zip → android/webapp assets
-│   └── build-native.sh             # clone upstream (pinned) + cargo-ndk (cli | gui | apk | all)
+│   ├── build-web.sh                # pinned upstream + wasm toolchain → webapp assets
+│   ├── fetch-web-assets.sh         # stock release zip alternative (no mobile patches)
+│   ├── apply-upstream-patches.sh   # patches/*.patch → the pinned checkout (idempotent)
+│   └── build-native.sh             # clone upstream (pinned) + patches + cargo-ndk (cli | gui | apk)
 └── .github/workflows/
     ├── android-web.yml             # → effectdroid-web-<v>.apk (also attached to tag releases)
     └── android-native.yml          # → effectcraft-cli-android-arm64.tar.gz + GUI .so + native APK
@@ -39,7 +43,9 @@ EffectDroid/
 Both ports are **built from the pinned upstream release** (`EFFECTCRAFT_REF`, default
 `v0.17.0`) at build time — no fork of the EffectCraft tree lives in this repository. The only
 upstream-derived code is the small Android entry crate (`native/effectcraft-android`), written
-against upstream's public APIs (`EffectcraftApp`, `effectcraft_host`, `effectcraft_engine`).
+against upstream's public APIs (`EffectcraftApp`, `effectcraft_host`, `effectcraft_engine`),
+plus the small documented diffs in `patches/` (mobile responsiveness — see below), which every
+build script applies to the fresh checkout.
 
 ### Why a WebView for the web port?
 
@@ -65,7 +71,9 @@ Upstream needs **no COOP/COEP headers** (no `SharedArrayBuffer` — see
 ### Build it (CI — recommended)
 
 Push to `main`, open a PR, or run **Actions → Android (web port) → Run workflow**
-(`inputs.ref` picks the EffectCraft release, default `v0.17.0`). The run's artifacts contain
+(`inputs.ref` picks the EffectCraft release, default `v0.17.0`). The run compiles the wasm
+bundle from source (`scripts/build-web.sh`: `cargo xtask web` with `wasm-bindgen` 0.2.129 +
+`wasm-opt`, applying `patches/` first) and its artifacts contain
 `effectdroid-web-<v>.apk` — release build, signed with the debug key so it installs directly:
 
 ```sh
@@ -76,16 +84,21 @@ Pushing a tag `v*` additionally attaches the APK to a GitHub release of this rep
 
 ### Build it (local)
 
-Requirements: JDK 17, Android SDK (compileSdk 35), `gh` or `curl`, `unzip`. The Gradle wrapper
-downloads Gradle 8.9 on first run.
+Requirements: JDK 17, Android SDK (compileSdk 35). The Gradle wrapper downloads Gradle 8.9 on
+first run. Assets, pick one:
 
 ```sh
-scripts/fetch-web-assets.sh v0.17.0     # ~60 MB release zip → android/webapp/src/main/assets/web
+scripts/build-web.sh                    # wasm from pinned source + mobile patches (needs
+                                        # wasm32 target, wasm-bindgen-cli = lockfile version,
+                                        # optionally wasm-opt — upstream docs/web.md)
+# — or the stock release zip without the mobile patches:
+scripts/fetch-web-assets.sh v0.17.0     # ~60 MB release zip (needs gh/curl + unzip)
+
 cd android && ./gradlew :webapp:assembleRelease
 # android/webapp/build/outputs/apk/release/webapp-release.apk
 ```
 
-`assembleRelease` refuses to run without the assets and tells you to run the fetch script.
+`assembleRelease` refuses to run without the assets and tells you which script to run.
 
 ### Device requirements
 
@@ -110,6 +123,29 @@ ideally from CI secrets).
 | Service worker | Disabled on purpose (`?nosw`): assets are bundled, so it would only duplicate storage. PWA-install semantics from the web don't apply. |
 | Orientation | Allowed freely (`configChanges` handled, no reload); the UI re-lays out on resize. |
 | Downloads on API ≤ 28 | Written to `Android/data/<pkg>/files/Download/EffectCraft/` (scoped storage, no permission). API 29+: public `Download/EffectCraft/`. |
+
+## Mobile responsiveness (both ports)
+
+Desktop-first UIs are unusable on a ~390 pt phone screen; `patches/0001-mobile-responsive-ui.patch`
+fixes that once for both ports (the wasm build and the native build apply the same `patches/`):
+
+- **Phone workspace** — windows narrower than 720 pt adopt a dedicated layout: a full-width
+  tab strip (viewer, layer, project, effect controls, presets, properties, preview) over the
+  timeline. Tabs shrink widest-first and overflow into the strip's overflow menu (upstream
+  `craft-ui::tabs::fit`), so every panel stays reachable at 390 pt; no fixed 300 pt side
+  columns eat the screen. It only replaces an untouched `Default` layout — first run, or a
+  wide window rotated into portrait; a layout the user rearranged (or any workspace they
+  chose) is never clobbered. `Window ▸ Workspace` lists **Phone** like a built-in, next to
+  Small Screen / Minimal / … .
+- **Touch-sized controls** while narrow: 44×36 pt hit targets, wider item spacing, a 32 pt
+  menu strip; wide windows get the theme's own sizes back (follows rotation — the shell
+  already handles `orientation|screenSize` via `configChanges`).
+- Still available as before: **Settings ▸ Appearance ▸ UI Scale** (whole-UI zoom), the web
+  port's pinch-zoom (the viewport meta does not lock scaling), draggable split handles and
+  the tab overflow menu.
+
+Tune the behaviour by editing `patches/` — both build scripts re-apply them to every fresh
+checkout and fail loudly when a new `EFFECTCRAFT_REF` no longer matches.
 
 ## 2. The native arm64 port (Linux arm64 → Android)
 
@@ -187,7 +223,9 @@ export EFFECTCRAFT_REF=v0.18.0   # or pass to scripts/fetch-web-assets.sh / work
 ```
 
 Suggested upgrade flow: update the default in both workflows + both scripts + the version in
-`native/effectcraft-android/Cargo.toml`, run both workflows, smoke-test on a device.
+`native/effectcraft-android/Cargo.toml`, re-check `patches/` against the new tag (the build
+fails with a clear error if a patch no longer applies), run both workflows, smoke-test on a
+device.
 
 ## Attribution & license
 
