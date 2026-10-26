@@ -140,6 +140,16 @@ fixes that once for both ports (the wasm build and the native build apply the sa
 - **Touch-sized controls** while narrow: 44×36 pt hit targets, wider item spacing, a 32 pt
   menu strip; wide windows get the theme's own sizes back (follows rotation — the shell
   already handles `orientation|screenSize` via `configChanges`).
+- **Header** (the 40 pt tools bar): below 720 pt it grows to 76 pt and packs the twelve tool
+  slots into two rows; the items whose menus still carry them are dropped so nothing overlaps
+  (Discord/links → Help, tool pickers → Properties, snapping → View, workspace tabs → the
+  `»` menu — which lists every workspace, Phone included).
+- **Menu titles** scroll horizontally when they don't fit (swipe to reach Window/Help); a
+  desktop-width bar is unchanged.
+- **Home screen** (the first thing on a phone): quick-start tiles go 2×2 below 480 pt, the
+  Recent filter shrinks with the area, "Clear list" hides (it collided with the heading).
+- **Readability**: the default UI Scale (100) gets a +15% zoom on narrow windows; any
+  explicit Settings ▸ Appearance ▸ UI Scale still wins.
 - Still available as before: **Settings ▸ Appearance ▸ UI Scale** (whole-UI zoom), the web
   port's pinch-zoom (the viewport meta does not lock scaling), draggable split handles and
   the tab overflow menu.
