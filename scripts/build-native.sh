@@ -34,6 +34,29 @@ echo "-> upstream $REF @ $(git -C "$WORK" rev-parse --short HEAD)"
 rm -rf "$WORK/apps/effectcraft-android"
 cp -R "$ROOT/native/effectcraft-android" "$WORK/apps/effectcraft-android"
 
+# --- winit android backend feature for the CLI graph ---------------------------
+# effectcraft-cli → ui-egui → eframe → winit → android-activity. winit's android-activity
+# dependency is non-optional, but android-activity needs exactly one activity backend
+# feature or it fails with E0583 (`mod activity_impl` has no file without one). The GUI
+# crate selects `game-activity` (GameActivity); the headless CLI gets the lighter
+# `native-activity` glue. Separate cargo invocations → no feature clash between the two.
+python3 - "$WORK/apps/effectcraft-cli/Cargo.toml" <<'PYEOF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+if "android-native-activity" not in s:
+    s = s.rstrip("\n") + (
+        "\n\n# EffectDroid Android port: select winit's android backend for this graph.\n"
+        "[target.'cfg(target_os = \"android\")'.dependencies]\n"
+        "winit = { version = \"0.30\", default-features = false,"
+        " features = [\"android-native-activity\"] }\n"
+    )
+    open(p, "w").write(s)
+    print("-> patched effectcraft-cli manifest: winit android-native-activity")
+else:
+    print("-> effectcraft-cli manifest already selects an android backend")
+PYEOF
+
 # --- toolchain ----------------------------------------------------------------
 rustup target add aarch64-linux-android >/dev/null 2>&1 || rustup target add aarch64-linux-android
 if [ -z "${ANDROID_NDK_HOME:-}" ]; then
