@@ -3,7 +3,8 @@ name: Android (native arm64 port)
 # EffectDroid Native: retargets EffectCraft's Linux arm64 build to aarch64-linux-android
 # (Bionic) with cargo-ndk —
 #   * always: effectcraft-cli (headless render / MCP) as an arm64 Android binary
-#   * on dispatch with build_gui: libeffectcraft_android.so (eframe GUI) + the :nativeapp APK
+#   * also on push/PR (opt out on dispatch with build_gui=false): libeffectcraft_android.so
+#     (eframe GUI) + the :nativeapp APK
 on:
   workflow_dispatch:
     inputs:
@@ -111,7 +112,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build the native GUI (libeffectcraft_android.so)
-        if: github.event_name == 'workflow_dispatch' && inputs.build_gui
+        if: github.event_name != 'workflow_dispatch' || inputs.build_gui
         shell: bash
         run: |
           if ! scripts/build-native.sh gui 2>&1 | tee build-gui.log; then
@@ -123,7 +124,7 @@ jobs:
           fi
 
       - name: Assemble the native APK
-        if: github.event_name == 'workflow_dispatch' && inputs.build_gui
+        if: github.event_name != 'workflow_dispatch' || inputs.build_gui
         shell: bash
         run: |
           if ! scripts/build-native.sh apk 2>&1 | tee build-apk.log; then
@@ -135,7 +136,7 @@ jobs:
           fi
 
       - name: Upload native APK
-        if: github.event_name == 'workflow_dispatch' && inputs.build_gui
+        if: github.event_name != 'workflow_dispatch' || inputs.build_gui
         uses: actions/upload-artifact@v4
         with:
           name: effectdroid-native-apk
@@ -150,9 +151,9 @@ jobs:
             echo "### EffectCraft → aarch64-linux-android"
             echo "- ref: \`$EFFECTCRAFT_REF\`"
             echo "- CLI: built + uploaded (Termux / adb)"
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_gui }}" = "true" ]; then
+            if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ inputs.build_gui }}" = "true" ]; then
               echo "- GUI + APK: attempted (experimental — see docs/ANDROID.md)"
             else
-              echo "- GUI + APK: skipped (dispatch with build_gui to enable)"
+              echo "- GUI + APK: skipped (dispatch with build_gui=false)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
