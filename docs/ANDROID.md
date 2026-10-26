@@ -33,7 +33,7 @@ EffectDroid/
 │   └── build-native.sh             # clone upstream (pinned) + cargo-ndk (cli | gui | apk | all)
 └── .github/workflows/
     ├── android-web.yml             # → effectdroid-web-<v>.apk (also attached to tag releases)
-    └── android-native.yml          # → effectcraft-cli-android-arm64.tar.gz (+ GUI APK on dispatch)
+    └── android-native.yml          # → effectcraft-cli-android-arm64.tar.gz + GUI .so + native APK
 ```
 
 Both ports are **built from the pinned upstream release** (`EFFECTCRAFT_REF`, default
@@ -146,15 +146,18 @@ arm64, while the WebView port is the daily driver with working files/audio.
 
 ### Build it (CI)
 
-**Actions → Android (native arm64) → Run workflow**:
+Every push/PR touching `native/`, `android/nativeapp/` or the workflow produces:
 
-- always produces `effectcraft-cli-android-arm64.tar.gz` (also on push/PR touching `native/`);
-- with `build_gui: true` (default) additionally builds `libeffectcraft_android.so` and
-  `effectdroid-native-<v>.apk`.
+- `effectcraft-cli-android-arm64.tar.gz` (headless CLI);
+- `libeffectcraft_android.so` and `effectdroid-native-<v>.apk` (native GUI — experimental).
 
-The first GUI run is a cold Rust build of the whole workspace (40–90 min); results are cached
-afterwards. Treat red GUI builds as upstream API drift — the failure log points at the entry
-crate (`native/effectcraft-android/src/lib.rs`), which is the only EffectDroid-owned Rust code.
+`workflow_dispatch` stays available for manual runs (`build_gui: false` skips the GUI/APK
+steps); dispatch needs write access to the Actions API.
+
+The first GUI run is a cold Rust build of the whole workspace (tens of minutes; ~15 min with
+a warm cargo cache). Treat red GUI builds as upstream API drift — the failure log points at
+the entry crate (`native/effectcraft-android/src/lib.rs`), which is the only EffectDroid-owned
+Rust code.
 
 ### Build it (local)
 
