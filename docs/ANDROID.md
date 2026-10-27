@@ -148,8 +148,26 @@ fixes that once for both ports (the wasm build and the native build apply the sa
   desktop-width bar is unchanged.
 - **Home screen** (the first thing on a phone): quick-start tiles go 2×2 below 480 pt, the
   Recent filter shrinks with the area, "Clear list" hides (it collided with the heading).
-- **Readability**: the default UI Scale (100) gets a +15% zoom on narrow windows; any
-  explicit Settings ▸ Appearance ▸ UI Scale still wins.
+- **Readability**: the default UI Scale (100) gets a +15% zoom on phones; any explicit
+  Settings ▸ Appearance ▸ UI Scale still wins.
+- **Phone rule follows PhotoDroid**: the *shorter* side under 600 pt (either orientation, so a
+  landscape phone stays on the Phone workspace, gets the touch sizing and the zoom) while the
+  header/menu packing stays keyed on width (720 pt for the two-row header and the taller menu
+  strip, 960 pt for dropping the right-hand header items).
+- **Long-press stands in for double-click** on the eight activation actions that need one
+  (apply preset/effect, open comp, edit comment, reveal property, rename, open marker, open
+  flowchart node) — egui already maps a held touch to `secondary_clicked`, so rows *with* a
+  context menu keep it untouched.
+- **Lists scroll under a finger**: effects, preset, media and project rows sense clicks alone
+  on touch screens (`touch::row_sense`), so a swipe scrolls the list instead of starting a row
+  drag; mouse sessions keep `click_and_drag` byte for byte.
+- **Settings on a phone**: pages move from the left sidebar to a horizontal tab strip above the
+  fields; dialog bodies already fit via `modal_space`.
+- **System bars**: both themes set `android:windowOptOutEdgeToEdgeEnforcement` (targetSdk 35
+  enforces edge-to-edge on Android 15+, and egui has no insets pipeline yet). Future work: a
+  PhotoDroid-style `safe_area_insets` fed from the window insets (status/nav bars, cutout, IME).
+- The gesture helpers live in `crates/ui-egui/src/touch.rs` (new file inside the patch), set
+  once per frame by `EffectcraftApp::update`.
 - Still available as before: **Settings ▸ Appearance ▸ UI Scale** (whole-UI zoom), the web
   port's pinch-zoom (the viewport meta does not lock scaling), draggable split handles and
   the tab overflow menu.
@@ -242,4 +260,5 @@ device.
 EffectCraft is © its authors, MIT **or** Apache-2.0 (<https://github.com/storytold/effectcraft>;
 see its `NOTICE`, `ATTRIBUTION.md` and license files). EffectDroid fetches and builds it at
 build time; no upstream code is vendored except the Android entry crate, which is written
-against upstream's public API. EffectDroid's own code is MIT (see `LICENSE`).
+against upstream's public API. EffectDroid's own code is MIT OR Apache-2.0
+(see `LICENSE-MIT` / `LICENSE-APACHE`, plus `NOTICE` and `ATTRIBUTION.md`).

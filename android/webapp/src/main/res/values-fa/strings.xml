@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EffectDroid</string>
+    <string name="file_chooser_title">انتخاب فایل</string>
+    <string name="download_started">در حال ذخیرهٔ %1$s…</string>
+    <string name="download_done">در Download/EffectCraft ذخیره شد: %1$s</string>
+    <string name="download_failed">ذخیرهٔ %1$s ناموفق بود: %2$s</string>
+    <string name="external_link_failed">هیچ برنامه‌ای برای باز کردن این پیوند نیست</string>
+</resources>
