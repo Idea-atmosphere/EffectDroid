@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EffectDroid</string>
+    <string name="file_chooser_title">Open file</string>
+    <string name="download_started">Saving %1$s…</string>
+    <string name="download_done">Saved to Download/EffectCraft/%1$s</string>
+    <string name="download_failed">Could not save %1$s: %2$s</string>
+    <string name="external_link_failed">No app can open this link</string>
+</resources>

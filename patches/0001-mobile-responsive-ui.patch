@@ -1,0 +1,541 @@
+diff --git a/crates/ui-egui/src/dock.rs b/crates/ui-egui/src/dock.rs
+index ae66eae..58f4921 100644
+--- a/crates/ui-egui/src/dock.rs
++++ b/crates/ui-egui/src/dock.rs
+@@ -282,6 +282,7 @@ pub const WORKSPACES: &[&str] = &[
+     "Default",
+     "Standard",
+     "Small Screen",
++    "Phone",
+     "Animation",
+     "Effects",
+     "Motion Tracking",
+@@ -407,6 +408,16 @@ pub fn workspace(name: &str) -> DockNode {
+             ),
+             tabs(&[Timeline], 0),
+         ),
++        // EffectDroid (mobile): phone-narrow windows get a full-width tab strip over the
++        // timeline instead of fixed side columns — selected tab first, the rest shrink and
++        // overflow into the strip's overflow menu (craft-ui `tabs::fit`), so every panel
++        // stays reachable at ~390 pt wide. Chosen by `EffectcraftApp` while the layout is
++        // still the untouched Default; Window ▸ Workspace switches back at any time.
++        "Phone" => vsplit(
++            Ratio(0.55),
++            tabs(&[Composition, Layer, Project, EffectControls, EffectsPresets, Properties, Preview], 0),
++            tabs(&[Timeline, RenderQueue, Progress], 0),
++        ),
+         "All Panels" => vsplit(
+             Ratio(0.55),
+             hsplit(
+diff --git a/crates/ui-egui/src/header.rs b/crates/ui-egui/src/header.rs
+index c1272c4..16b996a 100644
+--- a/crates/ui-egui/src/header.rs
++++ b/crates/ui-egui/src/header.rs
+@@ -22,9 +22,15 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+     p.line_segment([rect.left_bottom(), rect.right_bottom()], Stroke::new(1.0, t.app_bg));
+     let cy = rect.center().y;
+     let mut x = rect.min.x + if app.integrated_titlebar && !app.ui.show_menu_bar { 80.0 } else { 10.0 };
++    // EffectDroid (mobile): on phone-narrow headers the tools pack into two rows and the
++    // items whose menus still carry them are dropped (links -> Help, tool options -> their
++    // panels, snapping -> View, workspace tabs -> the » menu), so the bar never overlaps.
++    // The threshold covers both phone orientations (upstream's full bar needs ~1100 pt).
++    let narrow_hdr = rect.width() < 960.0;
++    let base_y = if narrow_hdr { rect.min.y + 7.0 } else { cy - 13.0 };
+ 
+     // Brand mark.
+-    let brand = Rect::from_min_size(pos2(x, cy - 12.0), vec2(24.0, 24.0));
++    let brand = Rect::from_min_size(pos2(x, base_y + 1.0), vec2(24.0, 24.0));
+     paint_logo(&p, brand);
+     let bresp = ui.interact(brand, egui::Id::new("brand"), Sense::click());
+     app.auto.add_response("header.about", &bresp, "About EffectCraft");
+@@ -35,14 +41,14 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+     x += 32.0;
+ 
+     // Home.
+-    let home = Rect::from_min_size(pos2(x, cy - 13.0), vec2(26.0, 26.0));
++    let home = Rect::from_min_size(pos2(x, base_y), vec2(26.0, 26.0));
+     let home_response = widgets::icon_button(ui, home, Icon::Home, app.ui.start_screen, &t, egui::Id::new("tool-home")).on_hover_text(tr("Home"));
+     app.auto.add_response("header.home", &home_response, "Home");
+     if home_response.clicked() {
+         app.ui.start_screen = !app.ui.start_screen;
+     }
+     x += 30.0;
+-    p.line_segment([pos2(x, cy - 10.0), pos2(x, cy + 10.0)], Stroke::new(1.0, t.separator));
++    p.line_segment([pos2(x, base_y + 3.0), pos2(x, if narrow_hdr { base_y + 59.0 } else { cy + 10.0 })], Stroke::new(1.0, t.separator));
+     x += 6.0;
+ 
+     // Tool slots (with group separators after camera tools and pan-behind).
+@@ -50,9 +56,17 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+     if ui.input(|i| i.pointer.any_pressed()) {
+         ui.data_mut(|d| d.remove::<egui::Id>(held_id));
+     }
++    let slot_origin = x;
++    let slot_limit = rect.max.x - (if narrow_hdr { 96.0 } else { 10.0 });
++    let mut slot_row = 0usize;
+     for (si, slot) in Tool::SLOTS.iter().enumerate() {
++        if narrow_hdr && x + 30.0 > slot_limit {
++            x = slot_origin;
++            slot_row += 1;
++        }
++        let by = base_y + slot_row as f32 * 31.0;
+         let cur = app.ui.slot_tools.get(si).copied().unwrap_or(slot[0]);
+-        let r = Rect::from_min_size(pos2(x, cy - 13.0), vec2(26.0, 26.0));
++        let r = Rect::from_min_size(pos2(x, by), vec2(26.0, 26.0));
+         let active = slot.contains(&app.ui.tool);
+         let id = egui::Id::new(("tool-slot", si));
+         let resp = widgets::icon_button(ui, r, cur.icon(), active, &t, id);
+@@ -118,13 +132,14 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+         x += 28.0;
+         if matches!(si, 2 | 5 | 7 | 10 | 13) {
+             x += 4.0;
+-            p.line_segment([pos2(x, cy - 10.0), pos2(x, cy + 10.0)], Stroke::new(1.0, t.separator));
++            p.line_segment([pos2(x, by + 3.0), pos2(x, by + 23.0)], Stroke::new(1.0, t.separator));
+             x += 6.0;
+         }
+     }
+ 
+-    // Tool options.
++    // Tool options (EffectDroid/mobile: dropped on narrow — Properties/panels carry them).
+     x += 10.0;
++    if !narrow_hdr {
+     // Selected shape layers: the options show their paint and edit it (as in After Effects).
+     let shape_layers: Vec<u64> = app
+         .session
+@@ -171,7 +186,9 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+     if app.ui.tool.roto_kind(false).is_some() {
+         x = roto_options(app, ui, &p, x, cy);
+     }
++    }
+     let snap = Rect::from_min_size(pos2(x, cy - 10.0), vec2(20.0, 20.0));
++    if !narrow_hdr {
+     // The engine owns snapping (View ▸ Snapping); the checkbox mirrors it.
+     app.ui.snapping = app.session.state.snapping;
+     if widgets::checkbox(ui, snap, app.ui.snapping, &t, egui::Id::new("snapping")).clicked() {
+@@ -181,9 +198,11 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+     app.auto.add("header.snapping", snap, "Snapping");
+     let label = p.text(pos2(snap.max.x + 4.0, cy), Align2::LEFT_CENTER, tr("Snapping"), Tokens::ui(12.0), t.text_dim);
+     snapping_options(app, ui, Rect::from_min_size(pos2(label.max.x + 2.0, cy - 9.0), vec2(18.0, 18.0)));
++    }
+ 
+     // Right side: community buttons, workspaces.
+     let mut rx = rect.max.x - 10.0;
++    if !narrow_hdr {
+     // The pill fits its label (icon, gap, text) with even padding: it was a fixed 104 px with the
+     // text at its left, which left a wide gap on the right (#581).
+     let label = p.layout_no_wrap(tr("Discord").to_string(), Tokens::semibold(12.0), Color32::WHITE);
+@@ -208,6 +227,7 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+         app.auto.add(&format!("header.{}", &id[4..]), r, tip);
+         rx = r.min.x - 4.0;
+     }
++    }
+     // Appearance: Sync with System, Light, Dark (a monitor, sun or moon), one click to the next.
+     let (icon, mode) = match app.session.prefs.appearance.appearance_mode.as_str() {
+         "auto" => (Icon::Monitor, tr("Sync with System")),
+@@ -271,7 +291,9 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+     }
+     rx = more.min.x - 6.0;
+     // After Effects 2026's workspace bar order (right to left here): Default, Review, Learn,
+-    // Small Screen, Standard.
++    // Small Screen, Standard. (EffectDroid/mobile: skipped on narrow bars — the » menu above
++    // lists every workspace, Phone included.)
++    if !narrow_hdr {
+     let shown = ["Standard", "Small Screen", "Learn", "Review", "Default"];
+     for name in shown {
+         let g = p.layout_no_wrap(crate::i18n::command_label("window.workspace", name).to_string(), Tokens::ui(12.0), t.text);
+@@ -299,6 +321,7 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+         }
+         rx = r.min.x - 2.0;
+     }
++    }
+ }
+ 
+ /// The Snapping options menu beside the checkbox: After Effects' Snap Edges Extended and Snap to
+diff --git a/crates/ui-egui/src/lib.rs b/crates/ui-egui/src/lib.rs
+index 5a15523..5535a75 100644
+--- a/crates/ui-egui/src/lib.rs
++++ b/crates/ui-egui/src/lib.rs
+@@ -30,6 +30,7 @@ mod pointer_wrap;
+ pub mod prefs_live;
+ pub mod state;
+ pub mod theme;
++mod touch;
+ pub mod widgets;
+ mod workspace_state;
+ 
+@@ -1667,6 +1668,32 @@ impl EffectcraftApp {
+         }
+         self.run_script_tasks(&ctx);
+         self.apply_prefs(&ctx);
++        // EffectDroid (mobile): width rules the header and menu packing; the shorter side
++        // picks the phone layout as in PhotoDroid's PHONE_MAX_SIDE rule (600 pt, either
++        // orientation), so a landscape phone keeps it too. Phone windows adopt the Phone
++        // workspace while the layout is still the untouched stored Default (first run, or a
++        // wide window rotated into portrait). A layout the user rearranged or a workspace
++        // they chose is never replaced — Window ▸ Workspace lists "Phone" like any built-in.
++        let win_size = ctx.content_rect().size();
++        let narrow = win_size.x < 720.0;
++        let phone = win_size.x.min(win_size.y) < 600.0;
++        touch::set_phone(&ctx, phone);
++        if phone && self.ui.workspace == "Default" && self.ui.dock == dock::workspace("Default") {
++            self.set_workspace("Phone");
++        }
++        // Touch-sized hit targets on phones. The theme applies its spacing only when
++        // prefs change, so this runs every frame to follow rotation both ways.
++        ctx.all_styles_mut(|s| {
++            s.spacing.interact_size = if phone { egui::vec2(44.0, 36.0) } else { egui::vec2(24.0, 22.0) };
++            s.spacing.item_spacing = if phone { egui::vec2(8.0, 6.0) } else { egui::vec2(6.0, 4.0) };
++        });
++        // Phone readability: the default UI Scale (100) gets a 15% zoom on phones;
++        // an explicit scale from Settings ▸ Appearance always wins.
++        let base_scale = self.session.prefs.appearance.ui_scale as f32 / 100.0;
++        let want_scale = if phone && base_scale == 1.0 { 1.15 } else { base_scale };
++        if (ctx.zoom_factor() - want_scale).abs() > 0.001 {
++            ctx.set_zoom_factor(want_scale);
++        }
+         self.handle_events(&ctx);
+         panels::unsaved::on_close_requested(self, &ctx);
+         let title = panels::unsaved::window_title(self);
+@@ -1697,13 +1724,15 @@ impl EffectcraftApp {
+         ui.painter().rect_filled(full, 0.0, t.app_bg);
+         let mut top = full.min.y;
+         if self.ui.show_menu_bar {
+-            let mb = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), 24.0));
++            // EffectDroid (mobile): a taller strip is easier to tap on phone-narrow windows.
++            let mb = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), if narrow { 32.0 } else { 24.0 }));
+             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(mb));
+             child.painter().rect_filled(mb, 0.0, t.header_bg);
+             menus::menu_bar(self, &mut child);
+             top = mb.max.y;
+         }
+-        let header_h = 40.0;
++        // EffectDroid (mobile): two rows of tools fit the phone-narrow header.
++        let header_h = if narrow { 76.0 } else { 40.0 };
+         let header = egui::Rect::from_min_size(egui::pos2(full.min.x, top), egui::vec2(full.width(), header_h));
+         header::show(self, ui, header);
+         let body = egui::Rect::from_min_max(egui::pos2(full.min.x + 4.0, header.max.y + 2.0), egui::pos2(full.max.x - 4.0, full.max.y - 4.0));
+diff --git a/crates/ui-egui/src/menus.rs b/crates/ui-egui/src/menus.rs
+index ea9a6d9..f22fdde 100644
+--- a/crates/ui-egui/src/menus.rs
++++ b/crates/ui-egui/src/menus.rs
+@@ -2095,7 +2095,12 @@ pub fn menu_bar(app: &mut EffectcraftApp, ui: &mut egui::Ui) {
+         nav.set_browsing();
+     }
+     let mut drawn = 0;
+-    ui.horizontal_centered(|ui| {
++    // EffectDroid (mobile): the titles must stay reachable on a phone-narrow bar (Window ▸
++    // Workspace, Settings…); swiping scrolls them, and a bar that fits scrolls nowhere.
++    egui::ScrollArea::horizontal()
++        .id_salt("mobile-menu-titles")
++        .auto_shrink([false, true])
++        .show(ui, |ui| ui.horizontal_centered(|ui| {
+         ui.add_space(6.0);
+         egui::MenuBar::new().config(egui::containers::menu::MenuConfig::new().style(crate::widgets::menu_style)).ui(ui, |ui| {
+             for node in effectcraft_engine::menus::menu_bar() {
+@@ -2150,7 +2155,7 @@ pub fn menu_bar(app: &mut EffectcraftApp, ui: &mut egui::Ui) {
+                 drawn += 1;
+             }
+         });
+-    });
++    }));
+     crate::menu_keys::handle(&ctx, &nav);
+     // egui leaves the closing to us (`IgnoreClicks`), so the menus close here: at once on a press
+     // outside them (the press itself still reaches the widget below) and when the window loses
+diff --git a/crates/ui-egui/src/panels/effect_controls.rs b/crates/ui-egui/src/panels/effect_controls.rs
+index 3295b13..e760d52 100644
+--- a/crates/ui-egui/src/panels/effect_controls.rs
++++ b/crates/ui-egui/src/panels/effect_controls.rs
+@@ -273,7 +273,7 @@ fn prop_row(
+     app.auto.add(&format!("effectControls.prop.{uid}.name"), name_clip, &prop.name);
+     p.with_clip_rect(name_clip.intersect(p.clip_rect())).text(pos2(swr.max.x + 6.0, cy), Align2::LEFT_CENTER, &prop.name, Tokens::ui(12.0), t.text);
+     let name_response = ui.interact(name_clip, egui::Id::new(("ec-prop-name", uid)), Sense::click());
+-    if name_response.double_clicked() {
++    if crate::touch::held_or_double(ui.ctx(), &name_response) {
+         app.ui.timeline.search.clear();
+         app.ui.timeline.scroll_to = Some(crate::state::ScrollTo::Property(uid));
+         if let Err(e) = crate::menus::frontend(app, ui.ctx(), "timeline.revealProps", json!({"props": [{"layer": layer.id.0, "prop": uid}]})) {
+diff --git a/crates/ui-egui/src/panels/effects_presets.rs b/crates/ui-egui/src/panels/effects_presets.rs
+index d2058fb..a9945fa 100644
+--- a/crates/ui-egui/src/panels/effects_presets.rs
++++ b/crates/ui-egui/src/panels/effects_presets.rs
+@@ -179,7 +179,7 @@ fn effect_row(
+         return;
+     }
+     let star = Rect::from_center_size(pos2(r.max.x - 38.0, r.center().y), vec2(16.0, 16.0));
+-    let resp = ui.interact(r.intersect(list), egui::Id::new((auto_prefix, e.id)), Sense::click_and_drag());
++    let resp = ui.interact(r.intersect(list), egui::Id::new((auto_prefix, e.id)), crate::touch::row_sense(ui.ctx()));
+     if resp.hovered() {
+         lp.rect_filled(r, 0.0, t.hover);
+     }
+@@ -206,7 +206,7 @@ fn effect_row(
+         app.session.save_prefs();
+         return;
+     }
+-    if resp.double_clicked() {
++    if crate::touch::held_or_double(&ctx, &resp) {
+         *apply = Some(Apply::Effect(e.id.to_string()));
+     }
+     if resp.drag_started() {
+@@ -234,7 +234,7 @@ fn preset_row(
+     if r.max.y < list.min.y || r.min.y > list.max.y {
+         return;
+     }
+-    let resp = ui.interact(r.intersect(list), egui::Id::new(("fxpreset", auto_id)), Sense::click_and_drag());
++    let resp = ui.interact(r.intersect(list), egui::Id::new(("fxpreset", auto_id)), crate::touch::row_sense(ui.ctx()));
+     if resp.hovered() {
+         lp.rect_filled(r, 0.0, t.hover);
+     }
+@@ -244,7 +244,7 @@ fn preset_row(
+     if resp.drag_started() {
+         egui::DragAndDrop::set_payload(ui.ctx(), DragPayload::Preset { preset: preset.clone(), name: name.to_string() });
+     }
+-    if resp.double_clicked() {
++    if crate::touch::held_or_double(ui.ctx(), &resp) {
+         *apply = Some(Apply::Preset(preset));
+     }
+ }
+diff --git a/crates/ui-egui/src/panels/essential.rs b/crates/ui-egui/src/panels/essential.rs
+index 2e99c7d..9d47a5a 100644
+--- a/crates/ui-egui/src/panels/essential.rs
++++ b/crates/ui-egui/src/panels/essential.rs
+@@ -310,7 +310,7 @@ fn name_label(app: &mut EffectcraftApp, ui: &mut egui::Ui, cid: ItemId, c: &EgCo
+         None => {
+             let r = ui.add(egui::Label::new(text).sense(egui::Sense::click()).truncate());
+             app.auto.add(&format!("essential.control.{}.name", c.id), r.rect, &c.name);
+-            if r.double_clicked() {
++            if crate::touch::held_or_double(ui.ctx(), &r) {
+                 ui.ctx().data_mut(|d| d.insert_temp(edit_id, c.name.clone()));
+             }
+         }
+diff --git a/crates/ui-egui/src/panels/flowchart.rs b/crates/ui-egui/src/panels/flowchart.rs
+index f59d359..7f46cb0 100644
+--- a/crates/ui-egui/src/panels/flowchart.rs
++++ b/crates/ui-egui/src/panels/flowchart.rs
+@@ -357,7 +357,7 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+                 }
+             }
+         }
+-        if resp.double_clicked() {
++        if crate::touch::held_or_double(ui.ctx(), &resp) {
+             match (n.kind, n.item, n.comp) {
+                 ("comp", Some(c), _) => cmds.push(("comp.open".into(), json!({"comp": c}))),
+                 (_, _, Some(c)) => cmds.push(("comp.open".into(), json!({"comp": c}))),
+diff --git a/crates/ui-egui/src/panels/home.rs b/crates/ui-egui/src/panels/home.rs
+index fcfd017..39add2e 100644
+--- a/crates/ui-egui/src/panels/home.rs
++++ b/crates/ui-egui/src/panels/home.rs
+@@ -360,9 +360,13 @@ fn home_page(
+         ("New from Template", "templates", Icon::Grid),
+     ];
+     let gap = 12.0;
+-    let tw = ((w - gap * 3.0) / 4.0).clamp(120.0, 220.0);
++    // EffectDroid (mobile): 2x2 quick-start tiles on narrow areas — four across overflows.
++    let cols = if w < 480.0 { 2.0 } else { 4.0 };
++    let tile_rows = if w < 480.0 { 2.0 } else { 1.0 };
++    let tw = ((w - gap * (cols - 1.0)) / cols).clamp(100.0, 220.0);
+     for (k, (label, id, icon)) in tiles.into_iter().enumerate() {
+-        let r = Rect::from_min_size(pos2(x0 + k as f32 * (tw + gap), y), vec2(tw, 64.0));
++        let k = k as f32;
++        let r = Rect::from_min_size(pos2(x0 + (k % cols) * (tw + gap), y + (k / cols).floor() * (64.0 + gap)), vec2(tw, 64.0));
+         let resp = ui.interact(r, egui::Id::new(("home-tile", id)), Sense::click());
+         p.rect_filled(r, 8.0, if resp.hovered() { t.hover } else { t.panel_bg });
+         p.rect_stroke(r, 8.0, Stroke::new(1.0, if resp.hovered() { t.accent } else { t.separator }), StrokeKind::Inside);
+@@ -380,18 +384,20 @@ fn home_page(
+             }
+         }
+     }
+-    y += 64.0 + 36.0;
++    y += tile_rows * 64.0 + (tile_rows - 1.0) * gap + 36.0;
+ 
+     // Recent: heading, filter, clear.
+     p.text(pos2(x0, y + 12.0), Align2::LEFT_CENTER, tr("Recent"), Tokens::semibold(17.0), t.tab_text_active);
+     let entries = recent_entries(&app.session.prefs);
+     let fid = egui::Id::new("home-filter");
+     let mut filter: String = ctx.data(|d| d.get_temp(fid)).unwrap_or_default();
+-    let fr = Rect::from_min_size(pos2(x0 + w - 240.0, y), vec2(240.0, 26.0));
++    // EffectDroid (mobile): the filter shrinks with the area (a fixed 240 pt starts left of x0).
++    let fw = (w * 0.55).clamp(120.0, 240.0);
++    let fr = Rect::from_min_size(pos2(x0 + w - fw, y), vec2(fw, 26.0));
+     widgets::search_field(ui, fr, &mut filter, tr("Filter recent files"), &t);
+     app.auto.add("home.filter", fr, "Filter recent files");
+     ctx.data_mut(|d| d.insert_temp(fid, filter.clone()));
+-    if !entries.is_empty() {
++    if !entries.is_empty() && w >= 480.0 {
+         let cr = Rect::from_min_size(pos2(fr.min.x - 96.0, y + 3.0), vec2(84.0, 20.0));
+         let resp = ui.interact(cr, egui::Id::new("home-clear-recent"), Sense::click());
+         p.text(cr.right_center(), Align2::RIGHT_CENTER, tr("Clear list"), Tokens::ui(11.5), if resp.hovered() { t.text } else { t.text_faint });
+diff --git a/crates/ui-egui/src/panels/markers_ui.rs b/crates/ui-egui/src/panels/markers_ui.rs
+index 2fff7e1..775ad40 100644
+--- a/crates/ui-egui/src/panels/markers_ui.rs
++++ b/crates/ui-egui/src/panels/markers_ui.rs
+@@ -459,7 +459,7 @@ fn nested_markers(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter
+         let tip = if m.comment.is_empty() { format!("Marker in {name}") } else { format!("{} (marker in {name})", m.comment) };
+         let resp = ui.interact(hit, egui::Id::new(("nested-marker", layer.id.0, i)), Sense::click()).on_hover_text(&tip);
+         app.auto.add(&format!("timeline.layer.{}.nestedMarker.{i}", layer.id.0), hit, &tip);
+-        if resp.double_clicked() {
++        if crate::touch::held_or_double(ui.ctx(), &resp) {
+             let opened =
+                 app.session.execute("comp.open", json!({"comp": item.0})).and_then(|_| app.session.execute("time.set", json!({"time": m.time.seconds()})));
+             if let Err(e) = opened {
+diff --git a/crates/ui-egui/src/panels/media_panels.rs b/crates/ui-egui/src/panels/media_panels.rs
+index cd32cb7..e0627c9 100644
+--- a/crates/ui-egui/src/panels/media_panels.rs
++++ b/crates/ui-egui/src/panels/media_panels.rs
+@@ -173,7 +173,7 @@ pub fn media_browser(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+         if !r.intersects(list) {
+             continue;
+         }
+-        let resp = ui.interact(r.intersect(list), egui::Id::new(("mb-entry", &e.path)), Sense::click_and_drag());
++        let resp = ui.interact(r.intersect(list), egui::Id::new(("mb-entry", &e.path)), crate::touch::row_sense(&ctx));
+         app.auto.add(&format!("mediaBrowser.entry.{}", e.name), r, &e.name);
+         lp.rect_filled(r, 4.0, if resp.hovered() { t.hover } else { t.row });
+         let thumb = Rect::from_min_max(r.min + vec2(6.0, 6.0), pos2(r.max.x - 6.0, r.max.y - 26.0));
+diff --git a/crates/ui-egui/src/panels/project.rs b/crates/ui-egui/src/panels/project.rs
+index 7f66a00..8c25360 100644
+--- a/crates/ui-egui/src/panels/project.rs
++++ b/crates/ui-egui/src/panels/project.rs
+@@ -643,7 +643,7 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+         );
+         // The row's click / drag area goes first, so the twirl, proxy, label and comment widgets
+         // on top of it take their own clicks.
+-        let mut resp = ui.interact(r.intersect(list), row_id(*id), Sense::click_and_drag());
++        let mut resp = ui.interact(r.intersect(list), row_id(*id), crate::touch::row_sense(&ctx));
+         app.auto.add(&format!("project.item.{}", id.0), r, &it.name);
+         // For screen readers: a tree item named by the item and its type, with its selection,
+         // depth and (a folder) open state. One Tab stop per row; the panel's keys then apply.
+@@ -818,7 +818,7 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
+                     cresp.widget_info(|| {
+                         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, crate::i18n::tr_args("Comment of {}: {}", &[&it.name, &it.comment]))
+                     });
+-                    if cresp.double_clicked() {
++                    if crate::touch::held_or_double(&ctx, &cresp) {
+                         ctx.data_mut(|d| d.insert_temp::<Editing>(edit_id(), (id.0, "comment".into(), it.comment.clone())));
+                     } else {
+                         // Other clicks select the row and open its context menu.
+diff --git a/crates/ui-egui/src/panels/properties.rs b/crates/ui-egui/src/panels/properties.rs
+index 9f24d34..8963e0a 100644
+--- a/crates/ui-egui/src/panels/properties.rs
++++ b/crates/ui-egui/src/panels/properties.rs
+@@ -249,7 +249,7 @@ fn transform_row(app: &mut EffectcraftApp, ui: &mut egui::Ui, p: &egui::Painter,
+     let label = Rect::from_min_max(pos2(r.min.x + 42.0, r.min.y), pos2(vx - 20.0, r.max.y));
+     let resp = ui.interact(label, egui::Id::new(("props-label", uid)), Sense::click());
+     app.auto.add(&format!("{base}.label"), label, &pr.name);
+-    if resp.double_clicked() {
++    if crate::touch::held_or_double(ui.ctx(), &resp) {
+         app.ui.timeline.search.clear();
+         app.ui.timeline.scroll_to = Some(crate::state::ScrollTo::Property(uid));
+         if let Err(e) = crate::menus::frontend(app, ui.ctx(), "timeline.revealProps", json!({"props": [{"layer": lid, "prop": uid}]})) {
+diff --git a/crates/ui-egui/src/panels/settings.rs b/crates/ui-egui/src/panels/settings.rs
+index 8edc40b..79b0c49 100644
+--- a/crates/ui-egui/src/panels/settings.rs
++++ b/crates/ui-egui/src/panels/settings.rs
+@@ -662,6 +662,39 @@ pub fn show(app: &mut EffectcraftApp, ctx: &egui::Context, t: &Tokens) {
+         });
+         {
+             let ui = &mut body;
++            // EffectDroid (mobile): on a phone the left sidebar would eat half the dialog,
++            // so the pages sit as a horizontal strip above the fields (as in PhotoDroid's
++            // phone Preferences); wider windows keep After Effects' left sidebar. The
++            // Previous/Next footer buttons page either way.
++            if crate::touch::phone(ctx) {
++                ui.vertical(|ui| {
++                    ui.set_width(ui.available_width());
++                    egui::ScrollArea::horizontal()
++                        .id_salt("settings-pages-phone")
++                        .auto_shrink([false, true])
++                        .show(ui, |ui| {
++                            ui.horizontal(|ui| {
++                                for p in &all {
++                                    let sel = page == p.id;
++                                    let r = ui.selectable_label(
++                                        sel,
++                                        egui::RichText::new(crate::i18n::settings_page_title(p.title)).font(Tokens::ui(12.5)),
++                                    );
++                                    app.auto.add(&format!("settings.page.{}", p.id), r.rect, p.title);
++                                    if r.clicked() {
++                                        page = p.id.to_string();
++                                    }
++                                }
++                            });
++                        });
++                    ui.separator();
++                    ui.label(RichText::new(crate::i18n::settings_page_title(all[idx].title)).font(Tokens::semibold(14.0)).color(t.tab_text_active));
++                    ui.add_space(6.0);
++                    egui::ScrollArea::vertical().max_height((body_h - 30.0).max(0.0)).auto_shrink([false, false]).show(ui, |ui| {
++                        page_ui(app, ui, &all[idx], &cur, t, &mut acts);
++                    });
++                });
++            } else {
+             // Page list (left, like After Effects).
+             let widest_page = all
+                 .iter()
+@@ -709,6 +742,7 @@ pub fn show(app: &mut EffectcraftApp, ctx: &egui::Context, t: &Tokens) {
+                     page_ui(app, ui, p, &cur, t, &mut acts);
+                 });
+             });
++            }
+         }
+     });
+     app.dialog_state.settings_page = page;
+diff --git a/crates/ui-egui/src/touch.rs b/crates/ui-egui/src/touch.rs
+new file mode 100644
+index 0000000..9fd99d8
+--- /dev/null
++++ b/crates/ui-egui/src/touch.rs
+@@ -0,0 +1,57 @@
++//! EffectDroid (mobile): touch gestures for phone layouts, mirroring PhotoDroid's
++//! `mobile.rs` helpers. A phone's taps and held presses stand in for a mouse: list rows
++//! sense clicks alone so a swipe scrolls the list, and a press held down does a
++//! double-click's job (egui's second tap rarely arrives inside its double-click window).
++//! Wide windows keep the desktop behaviour byte for byte.
++
++use egui::{Context, Response, Sense};
++
++/// The per-frame phone flag, set by `EffectcraftApp::update` (the shorter side under
++/// 600 pt, in either orientation).
++fn phone_key() -> egui::Id {
++    egui::Id::new("effectdroid-phone")
++}
++
++/// Sticky knowledge that this app has seen a touch event; a mouse-only session never
++/// sets it, so desktop rows keep their drag.
++fn touch_key() -> egui::Id {
++    egui::Id::new("effectdroid-touch-seen")
++}
++
++/// Called once per frame with the phone-layout flag. Records any touch event alongside
++/// it so the gestures below can tell a finger from a mouse.
++pub fn set_phone(ctx: &Context, on: bool) {
++    let touch = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Touch { .. })));
++    ctx.data_mut(|d| {
++        d.insert_temp(phone_key(), on);
++        if touch {
++            d.insert_temp(touch_key(), true);
++        }
++    });
++}
++
++/// Is this frame on the phone layout?
++pub fn phone(ctx: &Context) -> bool {
++    ctx.data(|d| d.get_temp::<bool>(phone_key())).unwrap_or(false)
++}
++
++/// A finger on a phone's screen: rows then take clicks alone ([`row_sense`]), because a
++/// finger's drag would otherwise take the swipe that should scroll the list.
++pub fn touch_screen(ctx: &Context) -> bool {
++    phone(ctx) && ctx.data(|d| d.get_temp::<bool>(touch_key())).unwrap_or(false)
++}
++
++/// The sense of a list row: a drag where a mouse has one (it reorders or applies the
++/// row), a click alone on a touch screen so a swipe scrolls the list.
++pub fn row_sense(ctx: &Context) -> Sense {
++    if touch_screen(ctx) { Sense::click() } else { Sense::click_and_drag() }
++}
++
++/// Does this response ask for its second-tap action? With a mouse that is a double-click.
++/// On a touch screen the second tap often arrives too late for egui's window (0.3 s), so
++/// a press held down does the same job instead — only on the phone layout, and only for
++/// widgets without a context menu: a long press there opens the menu already, because
++/// egui's `secondary_clicked` includes `long_touched`.
++pub fn held_or_double(ctx: &Context, resp: &Response) -> bool {
++    resp.double_clicked() || (resp.long_touched() && phone(ctx))
++}

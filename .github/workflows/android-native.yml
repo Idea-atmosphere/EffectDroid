@@ -1,0 +1,163 @@
+name: Android (native arm64 port)
+
+# EffectDroid Native: retargets EffectCraft's Linux arm64 build to aarch64-linux-android
+# (Bionic) with cargo-ndk —
+#   * always: effectcraft-cli (headless render / MCP) as an arm64 Android binary
+#   * also on push/PR (opt out on dispatch with build_gui=false): libeffectcraft_android.so
+#     (eframe GUI) + the :nativeapp APK
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'EffectCraft release tag to build from'
+        type: string
+        default: 'v0.17.0'
+      build_gui:
+        description: 'Also build the native GUI .so and the :nativeapp APK (experimental)'
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'scripts/build-native.sh'
+      - 'android/nativeapp/**'
+      - '.github/workflows/android-native.yml'
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'scripts/build-native.sh'
+      - 'android/nativeapp/**'
+      - '.github/workflows/android-native.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-native-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+env:
+  EFFECTCRAFT_REF: ${{ inputs.ref || 'v0.17.0' }}
+  ANDROID_NDK_VERSION: '27.3.13750724'
+
+jobs:
+  build:
+    name: cargo-ndk aarch64-linux-android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
+        shell: bash
+        run: |
+          # The runner image ships 27.3 preinstalled; older NDK packages rotate out of the
+          # SDK repository (27.2 vanished mid-run once), so prefer what is already there.
+          if [ -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" ]; then
+            echo "NDK $ANDROID_NDK_VERSION already present (image preinstall)"
+          elif ! sdkmanager --install "ndk;$ANDROID_NDK_VERSION" 2>&1 | tee sdkmanager.log; then
+            echo "::error::sdkmanager failed to install ndk;$ANDROID_NDK_VERSION — available NDK packages:"
+            { sdkmanager --list 2>/dev/null | grep -E "ndk;" || true; } | head -n 12 \
+              | while IFS= read -r line; do echo "::error::$line"; done || true
+            exit 1
+          fi
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Android SDK diagnostics (only if something failed)
+        if: failure()
+        shell: bash
+        run: |
+          echo "::error::ANDROID_HOME=${ANDROID_HOME:-unset} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset} sdkmanager=$(command -v sdkmanager || echo missing)"
+          { ls "${ANDROID_HOME:-/nonexistent}" 2>/dev/null || true; } | head -n 10 | while IFS= read -r d; do echo "::error::sdk entry: $d"; done || true
+
+      - name: Set up Rust (stable, Android target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache (upstream workspace)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '.upstream/effectcraft -> target'
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      # tee + annotations: raw run logs live on a host some environments can't reach, so the
+      # key failure lines are surfaced as annotations (readable through the Checks API).
+      - name: Build effectcraft-cli for Android arm64
+        shell: bash
+        run: |
+          if ! scripts/build-native.sh cli 2>&1 | tee build-cli.log; then
+            echo "::error::effectcraft-cli build failed — key lines:"
+            { grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|Exception in thread" build-cli.log \
+                || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
+            echo "::error::LOG TAIL build-cli.log: $( { tail -n 25 build-cli.log 2>/dev/null || true; } | tr '\n' '|' )"
+            exit 1
+          fi
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: effectcraft-cli-android-arm64
+          path: artifacts/effectcraft-cli-*-android-arm64.tar.gz
+          if-no-files-found: error
+
+      - name: Build the native GUI (libeffectcraft_android.so)
+        if: github.event_name != 'workflow_dispatch' || inputs.build_gui
+        shell: bash
+        run: |
+          if ! scripts/build-native.sh gui 2>&1 | tee build-gui.log; then
+            echo "::error::native GUI (libeffectcraft_android.so) build failed — key lines:"
+            { grep -E "error(\[[A-Z0-9]+\])?: |--> |^error: |Could not |Execution failed|panicked at|not produced|is not a member" build-gui.log \
+                || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
+            echo "::error::LOG TAIL build-gui.log: $( { tail -n 25 build-gui.log 2>/dev/null || true; } | tr '\n' '|' )"
+            exit 1
+          fi
+
+      - name: Assemble the native APK
+        if: github.event_name != 'workflow_dispatch' || inputs.build_gui
+        shell: bash
+        run: |
+          if ! scripts/build-native.sh apk 2>&1 | tee build-apk.log; then
+            echo "::error::native APK assembly failed — key lines:"
+            { grep -E "^e: |error: |FAILURE:|What went wrong|Execution failed|Could not |A problem occurred|Duplicate class" build-apk.log \
+                || true; } | head -n 4 | while IFS= read -r line; do echo "::error::$line"; done || true
+            echo "::error::LOG TAIL build-apk.log: $( { tail -n 25 build-apk.log 2>/dev/null || true; } | tr '\n' '|' )"
+            exit 1
+          fi
+
+      - name: Upload native APK
+        if: github.event_name != 'workflow_dispatch' || inputs.build_gui
+        uses: actions/upload-artifact@v4
+        with:
+          name: effectdroid-native-apk
+          path: artifacts/effectdroid-native-*.apk
+          if-no-files-found: error
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### EffectCraft → aarch64-linux-android"
+            echo "- ref: \`$EFFECTCRAFT_REF\`"
+            echo "- CLI: built + uploaded (Termux / adb)"
+            if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ inputs.build_gui }}" = "true" ]; then
+              echo "- GUI + APK: attempted (experimental — see docs/ANDROID.md)"
+            else
+              echo "- GUI + APK: skipped (dispatch with build_gui=false)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,37 @@
+# EffectDroid Native — EffectCraft's GUI entry point for Android.
+#
+# This crate is a *drop-in member* of the upstream EffectCraft workspace: scripts/build-native.sh
+# clones https://github.com/storytold/effectcraft at the pinned release and copies this directory
+# to `<clone>/apps/effectcraft-android/` (the workspace globs `apps/*`), so every dependency
+# resolves through upstream's `[workspace.dependencies]` at the exact reviewed revisions.
+#
+# Deliberately NO `[lints] workspace = true`: upstream forbids `unsafe_code` workspace-wide, and
+# the Android entry needs `#[unsafe(no_mangle)]` + `std::env::set_var` (an unsafe function in
+# edition 2024).
+[package]
+name = "effectcraft-android"
+version = "0.17.0" # keep in sync with the pinned EffectCraft ref (scripts/build-native.sh)
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "EffectCraft on Android (aarch64-linux-android): eframe/egui GUI entry, the Linux arm64 → Android port"
+
+[lib]
+name = "effectcraft_android"
+crate-type = ["cdylib"]
+
+[dependencies]
+effectcraft-engine = { workspace = true }
+effectcraft-host = { workspace = true }
+effectcraft-ui-egui = { workspace = true }
+egui = { workspace = true }
+# `android-game-activity` (not native-activity): effectcraft-ui-egui enables eframe's
+# `accesskit` unconditionally, and eframe compile-errors without game-activity on Android
+# (crates/eframe/src/lib.rs upstream). No `clipboard`: eframe 0.36 (the pinned release)
+# has no such feature — egui-winit falls back to its simulated in-app clipboard anyway.
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "links", "android-game-activity"] }
+log = { workspace = true }
+serde_json = { workspace = true }
+# Same version eframe uses; features unify. Needed to name `AndroidApp` in `android_main`.
+winit = { version = "0.30", default-features = false, features = ["android-game-activity"] }

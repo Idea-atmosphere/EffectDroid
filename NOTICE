@@ -1,0 +1,18 @@
+EffectDroid
+Copyright (c) 2026 EffectDroid contributors
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+This product builds and bundles software from EffectCraft
+(https://github.com/storytold/effectcraft), © its respective authors,
+licensed under the MIT License and/or the Apache License, Version 2.0.
+See this repository's ATTRIBUTION.md and upstream's NOTICE, ATTRIBUTION.md,
+LICENSE-MIT and LICENSE-APACHE files for the full attribution and terms.
+
+EffectCraft trademarks, icons and artwork remain the property of their
+owners; EffectDroid uses the EffectCraft application icon solely to
+identify builds of EffectCraft itself.
+
+Third-party material that the bundles carry (fonts, icons and other assets)
+keeps its own licences; the per-file list is in ATTRIBUTION.md, carried
+from EffectCraft upstream.
