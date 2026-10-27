@@ -26,6 +26,11 @@ if [ -d "$WORK/.git" ]; then
   git -C "$WORK" fetch --depth 1 origin "refs/tags/$REF" 2>/dev/null ||
     git -C "$WORK" fetch --depth 1 origin "$REF"
   git -C "$WORK" checkout -f FETCH_HEAD
+  # checkout -f on the same commit discards tracked modifications but leaves untracked
+  # files; the patch's new files (touch.rs) would then block both apply directions and
+  # kill the second in-job invocation (cli → gui). Remove them too — `-fd` without `-x`
+  # keeps the gitignored, cache-restored target/.
+  git -C "$WORK" clean -fd
 else
   KEEP=""
   if [ -d "$WORK" ]; then
